@@ -9,7 +9,7 @@ export class ApiError extends Error {
 const KEY = 'komatsu.demo.db.v1';
 const MEMBERSHIP = 20000, MAX_QTY = 12;
 const SET = () => DB.settings || (DB.settings = { membership_price: 20000, shipping_flat: 5000, free_shipping_from: 60000, max_reserva: 2 });
-const DEFAULT_TEXT = { bank_holder: 'Bodega Komatsu (ejemplo)', bank_name: 'Banco de ejemplo', bank_cbu: '0000000000000000000000', bank_alias: 'KOMATSU.SAKE.DEMO', bank_cuit: '30-00000000-0', payment_contact: 'pagos@komatsu.demo', whatsapp_number: '5491100000000', whatsapp_message: 'Hola Komatsu, quería hacer una consulta.' };
+const DEFAULT_TEXT = { bank_holder: 'Bodega Komatsu (ejemplo)', bank_name: 'Banco de ejemplo', bank_cbu: '0000000000000000000000', bank_alias: 'KOMATSU.SAKE.DEMO', bank_cuit: '30-00000000-0', payment_contact: 'pagos@komatsu.demo', whatsapp_number: '5491100000000', whatsapp_message: 'Hola Komatsu, quería hacer una consulta.', google_maps_key: '' };
 const TEXT = () => { DB.text ||= { ...DEFAULT_TEXT }; for (const k in DEFAULT_TEXT) DB.text[k] ??= DEFAULT_TEXT[k]; return DB.text; };
 const PAYSET = () => { const st = SET(); st.transfer_discount_pct ??= 5; st.transfer_expiry_hours ??= 48; return st; };
 const bank = () => { const t = TEXT(); return { holder: t.bank_holder, bank: t.bank_name, cbu: t.bank_cbu, alias: t.bank_alias, cuit: t.bank_cuit, contact: t.payment_contact }; };
@@ -66,7 +66,15 @@ async function seed() {
       delivery: 'envio', ship: { name: 'Kenji Romano', phone: '1155550000', address: 'Sarmiento 820', city: 'Morón', province: 'Buenos Aires', zip: '1708' },
       notes: null, created_at: iso(t - 20 * DAY),
       items: [{ product_id: 1, name: 'Komatsu Junmai Frutado 700 ml · 2026', unitPrice: 23800, qty: 1 }, { product_id: 2, name: 'Komatsu Junmai Cereza 700 ml · 2026', unitPrice: 25500, qty: 1 }],
+    }, {
+      id: 2, code: 'KMT-DEMO-0002', user_id: 2, status: 'enviado', channel: 'member', subtotal: 47600, savings: 8400, shipping: 0, total: 47600,
+      delivery: 'envio', ship: { name: 'Kenji Romano', phone: '1155550000', address: 'Av. de Mayo 1100', city: 'Ramos Mejía', province: 'Buenos Aires', zip: '1704' },
+      notes: 'Timbre 3B', created_at: iso(t - 2 * 36e5), payment_method: 'prueba',
+      items: [{ product_id: 1, name: 'Komatsu Junmai Frutado 700 ml · 2026', unitPrice: 23800, qty: 2 }],
     }],
+    // Repartidor de ejemplo: si nadie comparte GPS real, la demo lo hace recorrer el camino de la bodega al cliente.
+    deliveries: [{ order_id: 2, token: 'demo-reparto-kmt0002-' + rand(20).toLowerCase(), courier_name: 'Mateo Díaz', vehicle: 'moto',
+      started_at: iso(t - 4 * 60e3), finished_at: null, lat: null, lng: null, accuracy: null, heading: null, speed: null, located_at: null, sim: true }],
     announcements: [
       { id: 3, kind: 'anuncio', title: 'Reserva Shokunin: quedan pocas botellas', titleJp: '職人 限定', body: 'La tirada numerada de la Reserva Shokunin es sólo para socios. Cada socio puede reservar hasta 2 botellas.', public: 0, createdAt: iso(t - 1 * DAY) },
       { id: 2, kind: 'premio', title: 'Medalla de plata — Concurso de Sakes de Sudamérica', titleJp: '銀賞', body: 'El Junmai Frutado fue reconocido por su equilibrio aromático y su final limpio. Gracias a todos los socios que nos acompañan.', public: 1, createdAt: iso(t - 6 * DAY) },
@@ -110,7 +118,7 @@ let DB = null;
 async function load() {
   if (DB) return DB;
   try { DB = JSON.parse(localStorage.getItem(KEY)); } catch { DB = null; }
-  if (!DB || !DB.products || !DB.alliances || !DB.editions || DB.products[0]?.volume_ml !== 700) { DB = await seed(); save(); }
+  if (!DB || !DB.products || !DB.alliances || !DB.editions || !DB.deliveries || DB.products[0]?.volume_ml !== 700) { DB = await seed(); save(); }
   return DB;
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch { /* sin storage: queda en memoria */ } }
@@ -169,7 +177,35 @@ function quote(items, member, delivery) {
 
 const orderView = o => ({ paymentMethod: o.payment_method || 'prueba', discount: o.discount || 0, expiresAt: o.expires_at || null, ...(o.status === 'pendiente_pago' && o.payment_method === 'transferencia' ? { bank: bank() } : {}),
   code: o.code, status: o.status, channel: o.channel, createdAt: o.created_at, email: DB.users.find(u => u.id === o.user_id)?.email,
-  subtotal: o.subtotal, savings: o.savings, shipping: o.shipping, total: o.total, delivery: o.delivery, shipTo: o.ship, notes: o.notes, items: o.items });
+  subtotal: o.subtotal, savings: o.savings, shipping: o.shipping, total: o.total, delivery: o.delivery, shipTo: o.ship, notes: o.notes, items: o.items,
+  trackable: o.delivery === 'envio' && ['enviado', 'entregado'].includes(o.status) && !!DB.deliveries?.some(d => d.order_id === o.id) });
+
+// ---------- seguimiento de pedidos ----------
+const VEHICLES = { moto: 'Moto', auto: 'Auto', bici: 'Bicicleta' };
+const deliveryOf = o => DB.deliveries.find(d => d.order_id === o.id) || null;
+const destinationOf = o => o.delivery === 'envio' ? [o.ship.address, o.ship.city, o.ship.province, 'Argentina'].filter(Boolean).join(', ') : null;
+const courierLink = d => `${location.href.split('#')[0]}#/reparto/${d.token}`;
+// Recorrido simulado: de la bodega (Lomas del Mirador) a Ramos Mejía, en un ciclo de 8 minutos.
+const SIM_PATH = [[-34.6636, -58.5297], [-34.6609, -58.5331], [-34.6578, -58.5368], [-34.6551, -58.5409], [-34.6522, -58.5446], [-34.6493, -58.5488], [-34.6466, -58.5529], [-34.6441, -58.5571], [-34.6421, -58.5617]];
+function simPosition(d) {
+  const k = ((Date.now() - new Date(d.started_at).getTime()) / 480e3) % 1, seg = k * (SIM_PATH.length - 1), i = Math.floor(seg), f = seg - i;
+  const [a, b] = [SIM_PATH[i], SIM_PATH[Math.min(i + 1, SIM_PATH.length - 1)]];
+  const heading = (Math.atan2((b[1] - a[1]) * Math.cos(a[0] * Math.PI / 180), b[0] - a[0]) * 180 / Math.PI + 360) % 360;
+  return { lat: a[0] + (b[0] - a[0]) * f, lng: a[1] + (b[1] - a[1]) * f, accuracy: 9, heading: Math.round(heading), speed: 8.5, at: iso(now()), stale: false };
+}
+function positionOf(d) {
+  const real = d.located_at && Date.now() - new Date(d.located_at).getTime() < 15 * 60e3;
+  if (real) return { lat: d.lat, lng: d.lng, accuracy: d.accuracy, heading: d.heading, speed: d.speed, at: d.located_at, stale: Date.now() - new Date(d.located_at).getTime() > 15 * 60e3 };
+  return d.sim && d.started_at && !d.finished_at ? simPosition(d) : null;
+}
+const byToken = token => {
+  const d = DB.deliveries.find(x => x.token === token), o = d && DB.orders.find(x => x.id === d.order_id);
+  if (!d || !o || o.status === 'cancelado') err(404, 'Este link de reparto no existe o ya no está activo.');
+  return { d, o };
+};
+const courierOut = (d, o) => ({ order: { code: o.code, status: o.status, notes: o.notes, shipTo: o.ship, destination: destinationOf(o), items: o.items.map(i => ({ name: i.name, qty: i.qty })) },
+  courier: { name: d.courier_name, vehicle: d.vehicle }, startedAt: d.started_at, finishedAt: d.finished_at, locatedAt: d.located_at });
+const adminCourier = o => { const d = deliveryOf(o); return d && { courierName: d.courier_name, vehicle: d.vehicle, link: courierLink(d), startedAt: d.started_at, finishedAt: d.finished_at, locatedAt: d.located_at || (d.sim && !d.finished_at ? iso(now()) : null) }; };
 
 const taken = (eid, exceptUser) => DB.rsvps.filter(r => r.event_id === eid && r.user_id !== exceptUser).reduce((n, r) => n + 1 + r.guests, 0);
 
@@ -386,7 +422,7 @@ const routes = [
       pending: DB.orders.filter(o => ['pagado', 'preparando'].includes(o.status)).length, users: DB.users.filter(u => u.role === 'customer').length,
       members: live.length, mrr: live.filter(m => !m.cancel_at_period_end).reduce((n, m) => n + m.monthly_price, 0) };
   }],
-  ['GET', /^\/admin\/orders$/, () => { needAdmin(); return { orders: [...DB.orders].sort((a, c) => c.id - a.id).map(orderView), statuses: ['pendiente_pago', 'pagado', 'preparando', 'enviado', 'entregado', 'cancelado'] }; }],
+  ['GET', /^\/admin\/orders$/, () => { needAdmin(); return { orders: [...DB.orders].sort((a, c) => c.id - a.id).map(o => ({ ...orderView(o), courier: adminCourier(o) })), statuses: ['pendiente_pago', 'pagado', 'preparando', 'enviado', 'entregado', 'cancelado'], vehicles: VEHICLES }; }],
   ['PATCH', /^\/admin\/orders\/([\w-]+)$/, (b, m) => {
     needAdmin();
     const o = DB.orders.find(x => x.code === m[1]) || err(404, 'Pedido no encontrado.');
@@ -394,6 +430,46 @@ const routes = [
     if (o.status === 'cancelado' && b.status !== 'cancelado') err(409, 'Un pedido cancelado no se puede reactivar: el stock ya se liberó.');
     if (b.status === 'cancelado' && o.status !== 'cancelado') for (const it of o.items) DB.products.find(p => p.id === it.product_id).stock += it.qty;
     o.status = b.status; return { ok: true };
+  }],
+  ['POST', /^\/admin\/orders\/([\w-]+)\/delivery$/, (b, m) => {
+    needAdmin();
+    const o = DB.orders.find(x => x.code === m[1]) || err(404, 'Pedido no encontrado.');
+    if (o.delivery !== 'envio') err(409, 'Este pedido es para retirar en la bodega.');
+    if (!['pagado', 'preparando', 'enviado'].includes(o.status)) err(409, 'Sólo se puede asignar repartidor a un pedido pagado que todavía no se entregó.');
+    const name = s(b.courierName, 2, 60, 'Nombre del repartidor');
+    DB.deliveries = DB.deliveries.filter(d => d.order_id !== o.id);
+    const d = { order_id: o.id, token: 'r' + rand(12).toLowerCase() + rand(12).toLowerCase() + rand(12).toLowerCase(), courier_name: name, vehicle: VEHICLES[b.vehicle] ? b.vehicle : 'moto',
+      started_at: null, finished_at: null, lat: null, lng: null, accuracy: null, heading: null, speed: null, located_at: null, sim: false };
+    DB.deliveries.push(d);
+    return { delivery: adminCourier(o) };
+  }],
+  ['DELETE', /^\/admin\/orders\/([\w-]+)\/delivery$/, (b, m) => { needAdmin(); const o = DB.orders.find(x => x.code === m[1]) || err(404, 'Pedido no encontrado.'); DB.deliveries = DB.deliveries.filter(d => d.order_id !== o.id); return { ok: true }; }],
+  ['GET', /^\/delivery\/([\w-]+)$/, (b, m) => { const { d, o } = byToken(m[1]); return courierOut(d, o); }],
+  ['POST', /^\/delivery\/([\w-]+)\/start$/, (b, m) => {
+    const { d, o } = byToken(m[1]);
+    if (d.finished_at || o.status === 'entregado') err(409, 'Este pedido ya se entregó.');
+    d.started_at ||= iso(now()); d.sim = false; if (['pagado', 'preparando'].includes(o.status)) o.status = 'enviado';
+    return courierOut(d, o);
+  }],
+  ['POST', /^\/delivery\/([\w-]+)\/location$/, (b, m) => {
+    const { d, o } = byToken(m[1]);
+    if (!d.started_at || d.finished_at || o.status !== 'enviado') err(409, 'El recorrido no está activo.');
+    const lat = Number(b.lat), lng = Number(b.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) err(400, 'Ubicación inválida.');
+    Object.assign(d, { lat, lng, accuracy: b.accuracy ?? null, heading: b.heading ?? null, speed: b.speed ?? null, located_at: iso(now()), sim: false });
+    return { ok: true };
+  }],
+  ['POST', /^\/delivery\/([\w-]+)\/delivered$/, (b, m) => {
+    const { d, o } = byToken(m[1]);
+    Object.assign(d, { finished_at: d.finished_at || iso(now()), lat: null, lng: null, accuracy: null, heading: null, speed: null, located_at: null, sim: false });
+    o.status = 'entregado'; return { ok: true };
+  }],
+  ['GET', /^\/orders\/([\w-]+)\/tracking$/, (b, m) => {
+    const u = needUser(); const o = DB.orders.find(x => x.code === m[1] && x.user_id === u.id) || err(404, 'Pedido no encontrado.');
+    const d = deliveryOf(o);
+    return { code: o.code, status: o.status, delivery: o.delivery, destination: destinationOf(o),
+      courier: d ? { name: d.courier_name.split(' ')[0], vehicle: d.vehicle, startedAt: d.started_at, finishedAt: d.finished_at } : null,
+      position: o.status === 'enviado' && d ? positionOf(d) : null, mapsKey: TEXT().google_maps_key || null };
   }],
   ['GET', /^\/admin\/products$/, () => { needAdmin(); return { products: DB.products }; }],
   ['PATCH', /^\/admin\/products\/(\d+)$/, (b, m) => {
@@ -459,7 +535,7 @@ const routes = [
     return { ok: true };
   }],
   ['GET', /^\/admin\/settings$/, () => { needAdmin(); PAYSET(); return { settings: { ...SET() }, text: { ...TEXT() }, payments: { mercadopago: false, test: true },
-    textLabels: { bank_holder: 'Titular de la cuenta', bank_name: 'Banco', bank_cbu: 'CBU o CVU', bank_alias: 'Alias', bank_cuit: 'CUIT del titular', payment_contact: 'Contacto para enviar el comprobante (WhatsApp o email)', whatsapp_number: 'Número de WhatsApp (con código de país, ej. 5491155550000)', whatsapp_message: 'Mensaje inicial' },
+    textLabels: { bank_holder: 'Titular de la cuenta', bank_name: 'Banco', bank_cbu: 'CBU o CVU', bank_alias: 'Alias', bank_cuit: 'CUIT del titular', payment_contact: 'Contacto para enviar el comprobante (WhatsApp o email)', whatsapp_number: 'Número de WhatsApp (con código de país, ej. 5491155550000)', whatsapp_message: 'Mensaje inicial', google_maps_key: 'Clave de Google Maps (opcional: mapa en vivo con el recorrido)' },
     labels: { membership_price: 'Cuota mensual del Club', shipping_flat: 'Costo de envío', free_shipping_from: 'Envío sin cargo desde', max_reserva: 'Tope por socio en exclusivos', transfer_discount_pct: 'Descuento por transferencia (%)', transfer_expiry_hours: 'Horas de reserva para pagar por transferencia' } }; }],
   ['PATCH', /^\/admin\/settings$/, (b) => {
     needAdmin();

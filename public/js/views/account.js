@@ -17,7 +17,7 @@ export default async function account({ query }) {
   let body = '';
   if (tab === 'pedidos') {
     const { orders } = await api('/orders');
-    body = orders.length ? orders.map(orderDetail).join('') : '<div class="empty"><span class="kanji">空</span><p class="muted">Todavía no hiciste pedidos.</p><a class="btn gold" href="#/shop">Ir al Shop</a></div>';
+    body = orders.length ? orders.map(o => orderDetail(o, { track: true })).join('') : '<div class="empty"><span class="kanji">空</span><p class="muted">Todavía no hiciste pedidos.</p><a class="btn gold" href="#/shop">Ir al Shop</a></div>';
   } else if (tab === 'botellas') {
     const { certificates } = await api('/certificates/mine');
     body = `<div class="row" style="justify-content:space-between;margin-bottom:20px"><p class="muted" style="margin:0">Tus botellas numeradas registradas: ${certificates.length}</p><a class="btn small gold" href="#/certificado">Registrar una botella</a></div>`

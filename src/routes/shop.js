@@ -118,6 +118,7 @@ export function getOrder(db, userId, id) {
     notes: o.notes, items: items.map(i => ({ ...i })),
     paymentMethod: o.payment_method, discount: o.discount, expiresAt: o.expires_at, paidAt: o.paid_at,
     ...(o.status === 'pendiente_pago' && o.payment_method === 'transferencia' ? { bank: bankInfo(db) } : {}),
+    trackable: o.delivery === 'envio' && ['enviado', 'entregado'].includes(o.status) && !!db.prepare('SELECT 1 FROM deliveries WHERE order_id = ?').get(o.id),
   };
 }
 

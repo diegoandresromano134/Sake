@@ -4,6 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { requireAdmin } from '../auth.js';
 import { getOrder, markOrderPaid, cancelOrder } from './shop.js';
+import { adminDelivery, VEHICLES } from './delivery.js';
 import { confirmMembershipPayment } from '../membership.js';
 import { mpEnabled, testPaymentsEnabled } from '../payments.js';
 import { HttpError, int, str } from '../security.js';
@@ -32,7 +33,7 @@ export default function adminRoutes(db, { uploadsDir } = {}) {
 
   r.get('/orders', (req, res) => {
     const ids = db.prepare('SELECT id FROM orders ORDER BY id DESC LIMIT 200').all();
-    res.json({ orders: ids.map(o => getOrder(db, null, o.id)), statuses: STATUSES });
+    res.json({ orders: ids.map(o => ({ ...getOrder(db, null, o.id), courier: adminDelivery(db, o.id, req) })), statuses: STATUSES, vehicles: VEHICLES });
   });
 
   r.patch('/orders/:code', (req, res) => {

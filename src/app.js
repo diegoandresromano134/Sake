@@ -9,6 +9,7 @@ import clubRoutes from './routes/club.js';
 import adminRoutes from './routes/admin.js';
 import certificateRoutes from './routes/certificates.js';
 import paymentRoutes from './routes/payments.js';
+import deliveryRoutes from './routes/delivery.js';
 
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
@@ -22,7 +23,18 @@ export function createApp(db, { uploadsDir } = {}) {
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
       'X-Frame-Options': 'DENY',
-      'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+      'Content-Security-Policy': [
+        "default-src 'self'",
+        // Google Maps (seguimiento de pedidos): script, mosaicos del mapa y, sin clave, el mapa embebido.
+        "script-src 'self' https://maps.googleapis.com https://maps.gstatic.com",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src https://fonts.gstatic.com",
+        "img-src 'self' data: blob: https://*.googleapis.com https://*.gstatic.com https://*.google.com https://*.ggpht.com",
+        "connect-src 'self' https://*.googleapis.com https://*.gstatic.com https://*.google.com",
+        "frame-src https://maps.google.com https://www.google.com",
+        "worker-src blob:",
+        "frame-ancestors 'none'", "base-uri 'self'", "form-action 'self'",
+      ].join('; '),
     });
     next();
   });
@@ -44,6 +56,7 @@ export function createApp(db, { uploadsDir } = {}) {
   app.use('/api', shopRoutes(db));
   app.use('/api', clubRoutes(db));
   app.use('/api', certificateRoutes(db));
+  app.use('/api', deliveryRoutes(db));
   app.use('/api/admin', adminRoutes(db, { uploadsDir }));
   app.get('/api/health', (req, res) => res.json({ ok: true }));
   app.use('/api', (req, res, next) => next(new HttpError(404, 'Ruta no encontrada.')));

@@ -127,6 +127,27 @@ const ALLY_FIELDS = [
   { name: 'active', label: 'Mostrar en La Bodega', type: 'checkbox', default: true, full: true },
 ];
 
+// Repartidor del pedido: asignarlo genera un link para que comparta el GPS desde su celular.
+function courierBox(o, vehicles) {
+  if (o.delivery !== 'envio' || !['pagado', 'preparando', 'enviado', 'entregado'].includes(o.status)) return '';
+  const c = o.courier;
+  if (!c) return o.status === 'entregado' ? '' : `<form class="courier-assign" data-assign="${esc(o.code)}">
+      <span class="label">Repartidor</span>
+      <input name="courierName" required minlength="2" maxlength="60" placeholder="Nombre" aria-label="Nombre del repartidor">
+      <select name="vehicle" class="mini-select" aria-label="Vehículo">${Object.entries(vehicles).map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select>
+      <button class="btn small" type="submit">Asignar y crear link</button></form>`;
+  const status = c.finishedAt ? 'Entregado' : c.locatedAt ? `En camino · última ubicación ${timeFmt(c.locatedAt)}` : c.startedAt ? 'En camino · esperando GPS' : 'Todavía no salió';
+  const wa = `https://wa.me/?text=${encodeURIComponent(`Reparto Komatsu ${o.code}: abrí este link para ver la dirección y compartir tu ubicación con el cliente. ${c.link}`)}`;
+  return `<div class="courier-admin">
+      <span><span class="label">Repartidor</span> ${esc(c.courierName)} · ${esc(vehicles[c.vehicle] || c.vehicle)} · <span class="muted">${esc(status)}</span></span>
+      ${c.finishedAt ? '' : `<span class="row" style="gap:8px">
+        <button class="btn small gold" type="button" data-copy-link="${esc(c.link)}">Copiar link</button>
+        <a class="btn small" href="${esc(wa)}" target="_blank" rel="noopener">Enviar por WhatsApp</a>
+        <a class="btn small ghost" href="#/reparto/${esc(c.link.split('#/reparto/')[1] || '')}">Abrir</a>
+        <button class="link" type="button" data-unassign="${esc(o.code)}">Quitar</button></span>`}
+    </div>`;
+}
+
 export default async function admin({ query }) {
   if (!state.user) return needLogin();
   if (!isAdmin()) return { title: 'Acceso restringido', html: '<div class="container empty"><span class="kanji">禁</span><h2>Acceso restringido</h2></div>' };
@@ -135,12 +156,13 @@ export default async function admin({ query }) {
   let body = '';
 
   if (tab === 'pedidos') {
-    const { orders, statuses } = await api('/admin/orders');
+    const { orders, statuses, vehicles } = await api('/admin/orders');
     body = orders.length ? orders.map(o => `<div>${orderDetail(o)}
       <div class="row" style="margin:-6px 0 22px;font-size:13px"><span class="muted">${esc(o.email)} · ${esc(o.shipTo.name)} · ${esc(o.shipTo.phone)}${o.shipTo.zip ? ` · CP ${esc(o.shipTo.zip)}` : ''}${o.notes ? ` · “${esc(o.notes)}”` : ''}</span>
         <label class="label" for="st-${esc(o.code)}">Estado</label>
         <select id="st-${esc(o.code)}" data-order="${esc(o.code)}" class="mini-select">${statuses.map(x => `<option value="${x}" ${x === o.status ? 'selected' : ''}>${STATUS_LABEL[x] || x}</option>`).join('')}</select>
-        ${o.status === 'pendiente_pago' ? `<button class="btn small gold" data-paid="${esc(o.code)}">Confirmar pago</button>` : ''}</div></div>`).join('')
+        ${o.status === 'pendiente_pago' ? `<button class="btn small gold" data-paid="${esc(o.code)}">Confirmar pago</button>` : ''}</div>
+      ${courierBox(o, vehicles)}</div>`).join('')
       : '<p class="muted">Todavía no hay pedidos.</p>';
   } else if (tab === 'productos') {
     const { products } = await api('/admin/products');
@@ -232,7 +254,7 @@ export default async function admin({ query }) {
           ${payments.test ? '<p class="muted" style="font-size:13px;margin:0">Modo desarrollo: también se ofrece «Pago de prueba». No aparece en la tienda publicada.</p>' : ''}
           <h3 style="margin-top:8px">Transferencia bancaria</h3>
           <p class="muted" style="font-size:13px;margin:0">Con alias o CBU cargado, la transferencia aparece en el checkout.</p>
-          ${Object.keys(textLabels).filter(k => !k.startsWith('whatsapp_')).map(k => field({ name: 'text.' + k, label: textLabels[k] }, text[k], 'set')).join('')}
+          ${Object.keys(textLabels).filter(k => !k.startsWith('whatsapp_') && k !== 'google_maps_key').map(k => field({ name: 'text.' + k, label: textLabels[k] }, text[k], 'set')).join('')}
           ${['transfer_discount_pct', 'transfer_expiry_hours'].map(k => field({ name: k, label: labels[k], type: 'number', min: 0 }, settings[k], 'set')).join('')}
         </div>
       </div>
@@ -240,6 +262,10 @@ export default async function admin({ query }) {
         <p class="muted" style="font-size:13px;margin:0">Aparece flotando en todas las páginas. Dejá el número vacío para ocultarlo.</p>
         ${field({ name: 'text.whatsapp_number', label: textLabels.whatsapp_number, placeholder: '5491155550000' }, text.whatsapp_number, 'set')}
         ${field({ name: 'text.whatsapp_message', label: textLabels.whatsapp_message, placeholder: 'Hola Komatsu, quería hacer una consulta.' }, text.whatsapp_message, 'set')}
+      </div>
+      <div class="panel form" style="max-width:720px"><h3>Seguimiento de pedidos en el mapa</h3>
+        <p class="muted" style="font-size:13px;margin:0">Sin clave, el cliente ve el mapa de Google con la última ubicación del repartidor. Con una clave de Google Maps (Maps JavaScript API y Geocoding API habilitadas, restringida a tu dominio), ve el mapa oscuro de la marca con el repartidor moviéndose en vivo y el destino marcado.</p>
+        ${field({ name: 'text.google_maps_key', label: textLabels.google_maps_key, placeholder: 'AIza…' }, text.google_maps_key, 'set')}
       </div>
       <button class="btn gold" type="submit" style="align-self:flex-start">Guardar ajustes</button></form>`;
   }
@@ -262,6 +288,22 @@ export default async function admin({ query }) {
     </div></section>`,
     mount(root) {
       root.querySelectorAll('[data-tab]').forEach(b => b.addEventListener('click', () => go('admin?tab=' + b.dataset.tab)));
+      root.querySelectorAll('[data-assign]').forEach(f => f.addEventListener('submit', async e => {
+        e.preventDefault();
+        try {
+          await api(`/admin/orders/${f.dataset.assign}/delivery`, { method: 'POST', body: { courierName: f.elements.courierName.value, vehicle: f.elements.vehicle.value } });
+          toast('Repartidor asignado: copiá el link y mandáselo'); reload();
+        } catch (ex) { toast(ex.message, 'error'); }
+      }));
+      root.querySelectorAll('[data-copy-link]').forEach(b => b.addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(b.dataset.copyLink); toast('Link copiado'); }
+        catch { prompt('Copiá el link del repartidor:', b.dataset.copyLink); }
+      }));
+      root.querySelectorAll('[data-unassign]').forEach(b => b.addEventListener('click', async () => {
+        if (!confirm('¿Quitar el repartidor? El link deja de funcionar.')) return;
+        try { await api(`/admin/orders/${b.dataset.unassign}/delivery`, { method: 'DELETE' }); toast('Repartidor quitado'); reload(); }
+        catch (ex) { toast(ex.message, 'error'); }
+      }));
       root.querySelectorAll('[data-order]').forEach(sel => sel.addEventListener('change', async () => {
         try { await api('/admin/orders/' + sel.dataset.order, { method: 'PATCH', body: { status: sel.value } }); toast('Estado actualizado'); reload(); }
         catch (ex) { toast(ex.message, 'error'); }

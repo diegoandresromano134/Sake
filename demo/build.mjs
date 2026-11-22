@@ -29,7 +29,7 @@ const patch = (file, pairs) => {
 };
 patch(path.join(tmp, 'app.js'), [
   ["export function currentPath() { return location.hash.replace(/^#\\/?/, ''); }",
-   "let route = '';\nexport function currentPath() { return route; }"],
+   "let route = location.hash.replace(/^#\\/?/, '');\nexport function currentPath() { return route; }"],
   ["export function go(path) { location.hash = '#/' + path.replace(/^\\/+/, ''); }",
    "export function go(path) { route = path.replace(/^\\/+/, ''); render(); }\n" +
    "document.addEventListener('click', e => { const a = e.target.closest('a[href^=\"#/\"]'); if (!a || e.defaultPrevented) return; e.preventDefault(); go(a.getAttribute('href').slice(2)); });"],

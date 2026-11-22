@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Versión demo: la tienda viaja dentro de la app (assets/demo) y funciona sin servidor. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Ubicación: sólo para la pantalla del repartidor (seguimiento de pedidos). -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <application>
         <activity
             android:name=".DemoActivity"

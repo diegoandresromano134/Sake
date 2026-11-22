@@ -1,13 +1,17 @@
 package com.bodegakomatsu.app;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.window.OnBackInvokedDispatcher;
+import android.webkit.GeolocationPermissions;
+import android.webkit.WebChromeClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
@@ -24,6 +28,9 @@ import androidx.webkit.WebViewAssetLoader;
 public class DemoActivity extends Activity {
     private static final String HOME = "https://appassets.androidplatform.net/assets/demo/index.html";
     private WebView web;
+    private static final int REQ_LOCATION = 7;
+    private String geoOrigin;
+    private GeolocationPermissions.Callback geoCallback;
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -52,12 +59,27 @@ public class DemoActivity extends Activity {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 Uri url = request.getUrl();
+                if (!request.isForMainFrame()) return false; // el mapa de Google embebido carga adentro
                 if ("appassets.androidplatform.net".equals(url.getHost())) return false;
                 // Links externos (sitios de proveedores, etc.) se abren en el navegador.
                 try { startActivity(new Intent(Intent.ACTION_VIEW, url)); } catch (Exception ignored) { }
                 return true;
             }
         });
+        // Diálogos de confirmación y permiso de ubicación (pantalla del repartidor).
+        web.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
+                if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                    callback.invoke(origin, true, false);
+                    return;
+                }
+                geoOrigin = origin;
+                geoCallback = callback;
+                requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION}, REQ_LOCATION);
+            }
+        });
+        s.setGeolocationEnabled(true);
         setContentView(web);
         // Botón atrás (Android 13+ usa el sistema nuevo de "atrás predictivo").
         if (Build.VERSION.SDK_INT >= 33) {
@@ -66,6 +88,17 @@ public class DemoActivity extends Activity {
         }
         if (savedInstanceState != null) web.restoreState(savedInstanceState);
         else web.loadUrl(HOME);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(requestCode, permissions, results);
+        if (requestCode != REQ_LOCATION || geoCallback == null) return;
+        boolean granted = false;
+        for (int r : results) granted |= r == PackageManager.PERMISSION_GRANTED;
+        geoCallback.invoke(geoOrigin, granted, false);
+        geoCallback = null;
+        geoOrigin = null;
     }
 
     @Override

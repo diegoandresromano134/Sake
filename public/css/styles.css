@@ -421,3 +421,51 @@ dialog.age-gate::backdrop { background: rgba(0,0,0,.92); }
 /* Fotos de producto sobre fondo de estudio: la ficha muestra la botella entera */
 .pdp-art:has(> .product-photo) { background: #E4DED3; }
 .pdp-art .product-photo { object-fit: contain; }
+
+/* ---------- Seguimiento de pedidos (cliente y repartidor) ---------- */
+.track, .courier { max-width: 860px; }
+.track h1 { margin-bottom: 20px; }
+.track-code { font-size: .5em; letter-spacing: .14em; color: var(--muted); display: inline-block; vertical-align: middle; margin-left: 6px; }
+.track-steps { list-style: none; padding: 0; margin: 0 0 22px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; counter-reset: s; }
+.track-steps li { position: relative; display: grid; justify-items: center; gap: 4px; text-align: center; font-size: 12px; color: var(--muted); padding-top: 2px; }
+.track-steps li::before { content: ''; position: absolute; top: 8px; left: -50%; width: 100%; height: 1px; background: var(--line); z-index: 0; }
+.track-steps li:first-child::before { display: none; }
+.track-steps .dot { position: relative; z-index: 1; width: 14px; height: 14px; border-radius: 50%; border: 1px solid var(--line); background: var(--black); }
+.track-steps b { font-weight: 500; letter-spacing: .08em; text-transform: uppercase; font-size: 11px; }
+.track-steps .jp { font-family: var(--jp); font-size: 12px; }
+.track-steps li.done, .track-steps li.now { color: var(--paper); }
+.track-steps li.done .dot { background: var(--gold-soft); border-color: var(--gold-soft); }
+.track-steps li.done::before, .track-steps li.now::before { background: var(--gold-soft); }
+.track-steps li.now .dot { background: var(--gold); border-color: var(--gold); box-shadow: 0 0 0 5px rgba(212,175,55,.18); }
+.track-steps li.now b { color: var(--gold); }
+.track-map { position: relative; width: 100%; aspect-ratio: 16 / 10; background: #15130f; border: 1px solid var(--line); overflow: hidden; }
+.track-map iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; filter: grayscale(.25) contrast(1.05); }
+@media (max-width: 600px) { .track-map { aspect-ratio: 4 / 5; margin-inline: calc(-1 * var(--gutter)); width: auto; border-inline: 0; } }
+.track-info { margin-top: 18px; }
+.track-line { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 16px; }
+.track-sub { margin: 6px 0 0 20px; font-size: 13px; }
+.track-actions { margin-top: 16px; gap: 10px; }
+.track-dest { font-size: 13px; margin-top: 14px; }
+.track-ok { display: inline-grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--gold); color: var(--black); font-size: 14px; flex: none; }
+.track-btn { margin-top: 12px; }
+.live-dot { flex: none; display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #6BAF7B; box-shadow: 0 0 0 0 rgba(107,175,123,.6); animation: live-pulse 1.8s ease-out infinite; }
+.live-dot.wait { background: #F0C674; box-shadow: none; animation: none; }
+.live-dot.off { background: var(--muted); box-shadow: none; animation: none; }
+.btn.gold .live-dot { background: var(--black); box-shadow: 0 0 0 0 rgba(10,10,10,.4); }
+@keyframes live-pulse { 0% { box-shadow: 0 0 0 0 rgba(107,175,123,.6); } 70%, 100% { box-shadow: 0 0 0 9px rgba(107,175,123,0); } }
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }
+.courier h1 { letter-spacing: .06em; font-size: clamp(24px, 6vw, 36px); }
+.courier-card { margin-top: 20px; display: grid; gap: 12px; }
+.courier-name { font-size: 20px; margin: 0; }
+.courier-addr { font-size: 17px; margin: 0; line-height: 1.5; }
+.courier-notes { margin: 0; color: var(--gold-pale); font-style: italic; }
+.courier-items { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+.courier-share { margin-top: 16px; display: grid; gap: 12px; }
+.share-state { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.courier-share .btn.block { min-height: 56px; font-size: 13px; }
+.courier-tip { font-size: 13px; margin: 0; }
+.courier-delivered { margin-top: 16px; min-height: 56px; }
+.courier-done { margin-top: 16px; display: flex; gap: 12px; align-items: center; }
+.courier-assign, .courier-admin { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: -10px 0 26px; padding: 12px 14px; border: 1px dashed var(--line); font-size: 13px; }
+.courier-assign input { min-height: 36px; padding: 0 10px; width: 180px; max-width: 100%; }
+.courier-admin { justify-content: space-between; border-style: solid; border-color: var(--gold-soft); }

@@ -334,6 +334,53 @@ test('Mercado Pago: genera el link de pago y acredita con la notificación', asy
   }
 });
 
+test('seguimiento: el admin asigna repartidor, el repartidor comparte GPS y el cliente lo ve', async () => {
+  const cli = client(), adm = client(), courier = client(), other = client();
+  await cli('POST', '/auth/register', { name: 'Lía Tanaka', email: 'lia@x.com', password: '12345678', birthdate: adult });
+  const { order } = (await cli('POST', '/orders', { items: [{ slug: 'komatsu-frutado-700', qty: 1 }], delivery: 'envio', paymentMethod: 'prueba', ...ship })).body;
+  assert.equal(order.trackable, false);
+  // Antes de salir: sin posición
+  let t = (await cli('GET', `/orders/${order.code}/tracking`)).body;
+  assert.equal(t.courier, null); assert.equal(t.position, null);
+  assert.match(t.destination, /Av\. Rivadavia 1234, Morón/);
+  // Sólo el admin asigna
+  assert.equal((await cli('POST', `/admin/orders/${order.code}/delivery`, { courierName: 'Mateo', vehicle: 'moto' })).status, 403);
+  await adm('POST', '/auth/login', { email: 'admin@komatsu.local', password: 'komatsu-admin' });
+  const a = await adm('POST', `/admin/orders/${order.code}/delivery`, { courierName: 'Mateo Díaz', vehicle: 'moto' });
+  assert.equal(a.status, 201);
+  const token = a.body.delivery.link.split('#/reparto/')[1];
+  assert.ok(token.length >= 40);
+  // El repartidor no necesita cuenta; no puede mandar ubicación antes de salir
+  assert.equal((await courier('GET', `/delivery/${token}`)).body.order.shipTo.address, ship.address);
+  assert.equal((await courier('POST', `/delivery/${token}/location`, { lat: -34.66, lng: -58.53 })).status, 409);
+  assert.equal((await courier('POST', `/delivery/${token}/start`)).status, 200);
+  assert.equal((await courier('POST', `/delivery/${token}/location`, { lat: 200, lng: 0 })).status, 400);
+  assert.equal((await courier('POST', `/delivery/${token}/location`, { lat: -34.6636, lng: -58.5297, accuracy: 8, heading: 90, speed: 9 })).status, 200);
+  // El cliente lo ve en el mapa (sólo el nombre de pila del repartidor); otro usuario no
+  t = (await cli('GET', `/orders/${order.code}/tracking`)).body;
+  assert.equal(t.status, 'enviado');
+  assert.equal(t.courier.name, 'Mateo');
+  assert.deepEqual([t.position.lat, t.position.lng, t.position.stale], [-34.6636, -58.5297, false]);
+  assert.equal((await other('GET', `/orders/${order.code}/tracking`)).status, 401);
+  assert.equal((await cli('GET', '/orders')).body.orders[0].trackable, true);
+  // Link inválido
+  assert.equal((await courier('GET', '/delivery/no-existe-este-token-de-reparto-xx')).status, 404);
+  // Entregado: se borra la ubicación y el link ya no acepta posiciones
+  assert.equal((await courier('POST', `/delivery/${token}/delivered`)).status, 200);
+  t = (await cli('GET', `/orders/${order.code}/tracking`)).body;
+  assert.equal(t.status, 'entregado'); assert.equal(t.position, null);
+  assert.equal(db.prepare('SELECT lat FROM deliveries').get().lat, null);
+  assert.equal((await courier('POST', `/delivery/${token}/location`, { lat: -34.6, lng: -58.5 })).status, 409);
+  // Reasignar genera un link nuevo y el anterior deja de funcionar
+  await adm('PATCH', `/admin/orders/${order.code}`, { status: 'enviado' });
+  const b = await adm('POST', `/admin/orders/${order.code}/delivery`, { courierName: 'Sofi', vehicle: 'auto' });
+  assert.notEqual(b.body.delivery.link, a.body.delivery.link);
+  assert.equal((await courier('GET', `/delivery/${token}`)).status, 404);
+  // La clave de Google Maps se configura desde el panel
+  await adm('PATCH', '/admin/settings', { text: { google_maps_key: 'AIzaTEST' } });
+  assert.equal((await cli('GET', `/orders/${order.code}/tracking`)).body.mapsKey, 'AIzaTEST');
+});
+
 test('escrituras sin JSON se rechazan (CSRF)', async () => {
   const res = await fetch(base + '/auth/login', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'email=a&password=b' });
   assert.equal(res.status, 415);

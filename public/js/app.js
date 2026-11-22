@@ -12,6 +12,7 @@ import accountView from './views/account.js';
 import adminView from './views/admin.js';
 import legalView from './views/legal.js';
 import certificateView from './views/certificate.js';
+import { trackingView, courierView } from './views/tracking.js';
 
 const routes = [
   [/^$/, home],
@@ -30,6 +31,8 @@ const routes = [
   [/^admin$/, adminView],
   [/^legal$/, legalView],
   [/^certificado(?:\/([A-Za-z0-9-]+))?$/, certificateView],
+  [/^seguimiento\/([\w-]+)$/, trackingView],
+  [/^reparto\/([\w-]+)$/, courierView],
 ];
 
 const main = document.getElementById('main');
@@ -108,6 +111,7 @@ async function setupWhatsApp() {
 onChange(paintHeader);
 
 function ageGate() {
+  if (currentPath().startsWith('reparto/')) return; // el repartidor no compra: no ve la puerta de edad
   let ok = false;
   try { ok = localStorage.getItem('komatsu.age') === 'ok'; } catch { /* sin storage */ }
   if (ok) return;

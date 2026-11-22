@@ -135,7 +135,8 @@ export async function checkoutView() {
   };
 }
 
-export function orderDetail(o) {
+export function orderDetail(o, { track = false } = {}) {
+  const canTrack = track && o.delivery === 'envio' && ['pagado', 'preparando', 'enviado'].includes(o.status);
   return `<div class="order">
     <div class="order-head"><strong style="font-weight:500;letter-spacing:.08em">${esc(o.code)}</strong>
       <span class="row"><span class="badge ${o.channel === 'member' ? 'gold' : ''}">${o.channel === 'member' ? 'Member Shop' : 'Shop Público'}</span><span class="status ${esc(o.status)}">${esc(STATUS_LABEL[o.status] || o.status)}</span></span></div>
@@ -143,7 +144,8 @@ export function orderDetail(o) {
     <ul>${o.items.map(i => `<li>${i.qty} × ${esc(i.name)} — ${money(i.unitPrice * i.qty)}</li>`).join('')}</ul>
     <div class="row" style="justify-content:space-between;font-size:14px">
       <span class="muted">Envío ${o.shipping ? money(o.shipping) : 'sin cargo'}${o.savings ? ` · Ahorro socio ${money(o.savings)}` : ''}${o.discount ? ` · Descuento transferencia ${money(o.discount)}` : ''}${o.paymentMethod ? ` · ${esc(METHOD_LABEL[o.paymentMethod] || o.paymentMethod)}` : ''}</span>
-      <strong style="font-weight:500">Total ${money(o.total)}</strong></div></div>`;
+      <strong style="font-weight:500">Total ${money(o.total)}</strong></div>
+    ${canTrack ? `<a class="btn small ${o.status === 'enviado' ? 'gold' : ''} track-btn" href="#/seguimiento/${esc(o.code)}">${o.status === 'enviado' ? '<span class="live-dot"></span>Seguir en el mapa' : 'Seguimiento del pedido'}</a>` : ''}</div>`;
 }
 
 export async function orderView({ params }) {
@@ -165,7 +167,7 @@ export async function orderView({ params }) {
         ${head}
       </div>
       ${pending && order.bank ? bankBox({ bank: order.bank, amount: order.total, reference: order.code, expiresAt: order.expiresAt }) : ''}
-      ${orderDetail(order)}
+      ${orderDetail(order, { track: true })}
       <div class="row center" style="margin-top:24px">${pending && order.paymentMethod === 'mercadopago' ? '<button class="btn gold" id="recheck">Ya pagué: actualizar</button>' : ''}<a class="btn" href="#/cuenta">Ver mis pedidos</a><a class="btn ghost" href="#/shop">Seguir comprando</a></div>
     </div></section>`,
     mount(root) {

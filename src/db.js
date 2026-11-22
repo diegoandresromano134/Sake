@@ -158,6 +158,24 @@ CREATE TABLE IF NOT EXISTS bottle_codes (
   UNIQUE (edition_id, number)
 );
 
+-- Seguimiento de envíos: el repartidor comparte su GPS desde un link secreto.
+-- Sólo se guarda la última posición (no el recorrido) y se borra al entregar.
+CREATE TABLE IF NOT EXISTS deliveries (
+  order_id     INTEGER PRIMARY KEY REFERENCES orders(id) ON DELETE CASCADE,
+  token        TEXT NOT NULL UNIQUE,
+  courier_name TEXT NOT NULL,
+  vehicle      TEXT NOT NULL CHECK (vehicle IN ('moto','auto','bici')),
+  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  started_at   TEXT,
+  finished_at  TEXT,
+  lat          REAL,
+  lng          REAL,
+  accuracy     REAL,
+  heading      REAL,
+  speed        REAL,
+  located_at   TEXT
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL

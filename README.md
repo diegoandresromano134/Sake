@@ -117,6 +117,25 @@ botella centrada sobre fondo oscuro. Las fotos se guardan en `data/uploads/` (`U
 - El Club se paga mes a mes con los mismos medios. Desde 7 días antes del vencimiento, el socio paga el mes
   siguiente en *Mi cuenta → Membresía*; las transferencias del Club se confirman en Panel → Socios.
 
+## Seguimiento de pedidos en el mapa
+
+1. **Panel → Pedidos:** en un pedido pagado con envío, escribir el nombre del repartidor, elegir moto, auto o bici
+   y tocar *Asignar y crear link*. Copiar el link o mandarlo por WhatsApp al repartidor.
+2. **Repartidor:** abre el link en su celular (no necesita cuenta). Ve la dirección, las notas, el botón
+   *Cómo llegar* (abre Google Maps) y *Llamar*. Toca *Salir a entregar*: el pedido pasa a **Enviado** y el GPS
+   del celular se comparte cada pocos segundos. Al terminar toca *Marcar como entregado*.
+3. **Cliente:** en *Mi cuenta → Pedidos* aparece *Seguir en el mapa*: ve los pasos del pedido, el mapa de Google
+   con la ubicación del repartidor (se actualiza sola) y cuándo se actualizó por última vez.
+
+- **Mapa:** sin configurar nada se usa el mapa de Google embebido. Con una clave de Google Maps (Panel → Ajustes,
+  o la variable `GOOGLE_MAPS_API_KEY`) el cliente ve el mapa oscuro de la marca con el repartidor deslizándose
+  en vivo, la dirección hacia donde va y el destino marcado. En Google Cloud hay que habilitar *Maps JavaScript
+  API* y *Geocoding API* y restringir la clave al dominio de la tienda.
+- **Privacidad:** sólo se guarda la última posición (no el recorrido), el cliente ve sólo el nombre de pila del
+  repartidor y la ubicación se borra al entregar. Reasignar el repartidor genera un link nuevo y anula el anterior.
+- **Límite del navegador:** el celular manda la ubicación mientras la página del repartidor está abierta (la
+  pantalla se mantiene encendida sola). Si apaga la pantalla o pasa a otra app, puede pausarse hasta que vuelva.
+
 ## Reglas de negocio
 
 - **Precio de socio** (≈15% menos) aplicado por el servidor según la sesión; envío sin cargo para socios.
@@ -147,7 +166,8 @@ CSP estricta · límite de intentos en login/registro · todo el contenido se es
 | `SHIPPING_FLAT` / `FREE_SHIPPING_FROM` | `5000` / `60000` |
 | `NODE_ENV=production` | activa cookie `Secure` y desactiva el pago de prueba |
 | `MP_ACCESS_TOKEN` | credencial de Mercado Pago (activa el cobro con tarjetas) |
-| `PUBLIC_URL` | dirección pública, para los links de retorno de Mercado Pago |
+| `PUBLIC_URL` | dirección pública, para los links de retorno de Mercado Pago y del repartidor |
+| `GOOGLE_MAPS_API_KEY` | opcional: mapa en vivo del seguimiento (también se carga desde el panel) |
 
 ## Pendiente para producción
 
