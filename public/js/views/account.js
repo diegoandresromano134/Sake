@@ -5,6 +5,7 @@ import { needLogin, go } from '../app.js';
 import { orderDetail } from './cart.js';
 import { memberCard } from './club.js';
 import { certificateCard } from './certificate.js';
+import { METHOD_LABEL } from '../payments-ui.js';
 
 const TABS = [['pedidos', 'Pedidos'], ['botellas', 'Mis botellas'], ['club', 'Membresía'], ['perfil', 'Perfil'], ['seguridad', 'Seguridad']];
 const STATUS_LABEL = { activa: 'Activa', cancela_al_vencer: 'Se cancela al vencer', vencida: 'Vencida', pago_pendiente: 'Pago pendiente' };
@@ -24,7 +25,9 @@ export default async function account({ query }) {
         : '<div class="empty"><span class="kanji">瓶</span><p class="muted">Cada botella Komatsu trae un código en la etiqueta. Registralo y queda a tu nombre, con su certificado de autenticidad.</p></div>');
   } else if (tab === 'club') {
     const { membership: m, payments } = await api('/membership');
-    body = !m ? `<div class="panel gold"><h3>Todavía no sos socio</h3><p class="muted">Sumate al Club por ${money((await api('/settings')).membershipPrice)} por mes.</p><a class="btn gold" href="#/club">Conocer el Club</a></div>` : `
+    const pendingPay = payments.find(p => p.status === 'pendiente');
+    if (!m && pendingPay) body = `<div class="panel gold"><h3>Tu alta está en proceso</h3><p class="muted">Recibimos tu pedido de membresía por ${money(pendingPay.amount)} (${esc(METHOD_LABEL[pendingPay.method] || '')}). Se activa apenas confirmemos el pago.</p></div>`;
+    else body = !m ? `<div class="panel gold"><h3>Todavía no sos socio</h3><p class="muted">Sumate al Club por ${money((await api('/settings')).membershipPrice)} por mes.</p><a class="btn gold" href="#/club">Conocer el Club</a></div>` : `
       <div class="grid-2" style="align-items:start">
         <div>${m.active ? memberCard(u) : ''}</div>
         <div class="panel">
@@ -33,16 +36,16 @@ export default async function account({ query }) {
             <dt>N° de socio</dt><dd>${esc(m.memberNumber)}</dd>
             <dt>Cuota</dt><dd>${money(m.monthlyPrice)} / mes</dd>
             <dt>Socio desde</dt><dd>${dateFmt(m.startedAt)}</dd>
-            <dt>${m.cancelAtPeriodEnd ? 'Beneficios hasta' : 'Próximo cobro'}</dt><dd>${dateFmt(m.currentPeriodEnd)}</dd>
+            <dt>${m.active ? 'Activa hasta' : 'Venció el'}</dt><dd>${dateFmt(m.currentPeriodEnd)}</dd>
           </dl>
-          ${m.active && !m.cancelAtPeriodEnd ? '<button class="btn ghost" data-act="cancel">Cancelar membresía</button>' : ''}
-          ${m.active && m.cancelAtPeriodEnd ? '<button class="btn gold" data-act="resume">Mantener mi membresía</button>' : ''}
+          ${m.active && (new Date(m.currentPeriodEnd) - Date.now()) <= 7 * 864e5 ? '<a class="btn gold" href="#/club">Pagar el próximo mes</a>' : ''}
+          ${m.active && (new Date(m.currentPeriodEnd) - Date.now()) > 7 * 864e5 ? `<p class="muted" style="font-size:14px;margin:0">Se paga mes a mes. Podés pagar el próximo mes desde el ${dateFmt(new Date(new Date(m.currentPeriodEnd) - 7 * 864e5).toISOString())}.</p>` : ''}
           ${!m.active ? '<a class="btn gold" href="#/club">Reactivar membresía</a>' : ''}
         </div>
       </div>
       <h3 style="margin:36px 0 14px">Historial de pagos</h3>
-      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Período</th><th>Referencia</th><th class="num">Monto</th></tr></thead><tbody>
-        ${payments.map(p => `<tr><td>${dateFmt(p.createdAt)}</td><td>${dateFmt(p.periodStart, { day: 'numeric', month: 'short' })} → ${dateFmt(p.periodEnd, { day: 'numeric', month: 'short', year: 'numeric' })}</td><td class="muted">${esc(p.ref)}</td><td class="num">${money(p.amount)}</td></tr>`).join('')}
+      <div class="table-wrap"><table><thead><tr><th>Fecha</th><th>Período</th><th>Medio</th><th>Estado</th><th class="num">Monto</th></tr></thead><tbody>
+        ${payments.map(p => `<tr><td>${dateFmt(p.createdAt)}</td><td>${p.status === 'aprobado' ? `${dateFmt(p.periodStart, { day: 'numeric', month: 'short' })} → ${dateFmt(p.periodEnd, { day: 'numeric', month: 'short', year: 'numeric' })}` : '—'}</td><td>${esc(METHOD_LABEL[p.method] || p.method || '')}</td><td><span class="status ${p.status === 'aprobado' ? 'pagado' : p.status === 'pendiente' ? 'pendiente_pago' : 'cancelado'}">${esc(p.status)}</span></td><td class="num">${money(p.amount)}</td></tr>`).join('')}
       </tbody></table></div>`;
   } else if (tab === 'perfil') {
     body = `<form class="form panel" id="profile" style="max-width:520px">

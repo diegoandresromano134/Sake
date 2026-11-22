@@ -73,7 +73,7 @@ test('no socio: no puede comprar exclusivos ni preventa; compra pública con env
   assert.equal(q.subtotal, 28000);
   assert.equal(q.shipping, 5000);
   const before = db.prepare(`SELECT stock FROM products WHERE slug='komatsu-frutado-720'`).get().stock;
-  const r = await c('POST', '/orders', { items: [{ slug: 'komatsu-frutado-720', qty: 2 }], delivery: 'envio', ...ship });
+  const r = await c('POST', '/orders', { items: [{ slug: 'komatsu-frutado-720', qty: 2 }], delivery: 'envio', paymentMethod: 'prueba', ...ship });
   assert.equal(r.status, 201);
   assert.equal(r.body.order.total, 56000 + 5000);
   assert.equal(r.body.order.channel, 'publico');
@@ -82,19 +82,19 @@ test('no socio: no puede comprar exclusivos ni preventa; compra pública con env
 });
 
 test('checkout requiere sesión', async () => {
-  const r = await client()('POST', '/orders', { items: [{ slug: 'komatsu-frutado-720', qty: 1 }], delivery: 'retiro', ...ship });
+  const r = await client()('POST', '/orders', { items: [{ slug: 'komatsu-frutado-720', qty: 1 }], delivery: 'retiro', paymentMethod: 'prueba', ...ship });
   assert.equal(r.status, 401);
 });
 
 test('membresía: alta, precios de socio, exclusivos, club y baja', async () => {
   const c = client();
   await c('POST', '/auth/register', { name: 'Caro', email: 'caro@x.com', password: '12345678', birthdate: adult });
-  assert.equal((await c('POST', '/membership/subscribe', {})).status, 400);
-  const s = await c('POST', '/membership/subscribe', { acceptTerms: true });
+  assert.equal((await c('POST', '/membership/subscribe', { paymentMethod: 'prueba' })).status, 400);
+  const s = await c('POST', '/membership/subscribe', { acceptTerms: true, paymentMethod: 'prueba' });
   assert.equal(s.status, 201);
   assert.equal(s.body.membership.active, true);
   assert.equal(s.body.membership.monthlyPrice, 20000);
-  assert.equal((await c('POST', '/membership/subscribe', { acceptTerms: true })).status, 409);
+  assert.equal((await c('POST', '/membership/subscribe', { acceptTerms: true, paymentMethod: 'prueba' })).status, 409);
 
   const products = (await c('GET', '/products?channel=member')).body.products;
   assert.ok(products.some(p => p.membersOnly));
@@ -102,7 +102,7 @@ test('membresía: alta, precios de socio, exclusivos, club y baja', async () => 
 
   let q = (await c('POST', '/cart/quote', { items: [{ slug: 'komatsu-reserva-shokunin-720', qty: 3 }] })).body;
   assert.equal(q.issues.length, 1, 'tope de 2 por socio');
-  const r = await c('POST', '/orders', { items: [{ slug: 'komatsu-cereza-720', qty: 1 }, { slug: 'komatsu-reserva-shokunin-720', qty: 2 }], delivery: 'envio', ...ship });
+  const r = await c('POST', '/orders', { items: [{ slug: 'komatsu-cereza-720', qty: 1 }, { slug: 'komatsu-reserva-shokunin-720', qty: 2 }], delivery: 'envio', paymentMethod: 'prueba', ...ship });
   assert.equal(r.status, 201);
   assert.equal(r.body.order.shipping, 0);
   assert.equal(r.body.order.subtotal, 25500 + 104000);
@@ -240,6 +240,98 @@ test('botellas numeradas: edición, verificación y registro a nombre del dueño
   assert.equal(csv.status, 403);
   const list = (await admin('GET', '/admin/editions')).body.editions[0];
   assert.equal(list.claimed, 1);
+});
+
+test('pago por transferencia: reserva, datos bancarios, confirmación y vencimiento', async () => {
+  const admin = client();
+  await admin('POST', '/auth/login', { email: 'admin@komatsu.local', password: 'komatsu-admin' });
+  const c = client();
+  await c('POST', '/auth/register', { name: 'Tomás Transfer', email: 'tr@x.com', password: '12345678', birthdate: adult });
+  // Sin cuenta bancaria cargada, la transferencia no se ofrece
+  assert.ok(!(await c('GET', '/payment-methods')).body.methods.some(m => m.id === 'transferencia'));
+  await admin('PATCH', '/admin/settings', { transfer_discount_pct: 10, transfer_expiry_hours: 48, text: { bank_alias: 'KOMATSU.SAKE.MP', bank_holder: 'Bodega Komatsu', bank_cbu: '0000003100000000000001' } });
+  const m = (await c('GET', '/payment-methods')).body.methods.find(x => x.id === 'transferencia');
+  assert.equal(m.discountPct, 10);
+  const stock = () => db.prepare(`SELECT stock FROM products WHERE slug='komatsu-tokkuri-frutado-330'`).get().stock;
+  const s0 = stock();
+  const r = await c('POST', '/orders', { items: [{ slug: 'komatsu-tokkuri-frutado-330', qty: 2 }], delivery: 'retiro', paymentMethod: 'transferencia', ...ship });
+  assert.equal(r.status, 201);
+  const o = r.body.order;
+  assert.equal(o.status, 'pendiente_pago');
+  assert.equal(o.bank.alias, 'KOMATSU.SAKE.MP');
+  assert.equal(o.discount, Math.round(o.subtotal * 0.10));
+  assert.equal(o.total, o.subtotal - o.discount);
+  assert.equal(stock(), s0 - 2, 'el stock queda reservado');
+  // El admin confirma el pago
+  assert.equal((await admin('PATCH', `/admin/orders/${o.code}`, { status: 'pagado' })).status, 200);
+  assert.equal((await c('GET', `/orders/${o.code}`)).body.order.status, 'pagado');
+  // Un segundo pedido que vence sin pagar libera el stock
+  const r2 = await c('POST', '/orders', { items: [{ slug: 'komatsu-tokkuri-frutado-330', qty: 3 }], delivery: 'retiro', paymentMethod: 'transferencia', ...ship });
+  const s1 = stock();
+  db.prepare(`UPDATE orders SET expires_at='2000-01-01T00:00:00Z' WHERE code=?`).run(r2.body.order.code);
+  const { expirePendingOrders } = await import('../src/routes/shop.js');
+  assert.equal(expirePendingOrders(db), 1);
+  assert.equal(stock(), s1 + 3);
+  assert.equal((await c('GET', `/orders/${r2.body.order.code}`)).body.order.status, 'cancelado');
+  // Club por transferencia: pendiente hasta que el admin confirma
+  const sub = await c('POST', '/membership/subscribe', { acceptTerms: true, paymentMethod: 'transferencia' });
+  assert.equal(sub.body.pending, true);
+  assert.equal(sub.body.membership, null);
+  const pend = (await admin('GET', '/admin/membership-payments')).body.payments.find(p => p.email === 'tr@x.com');
+  assert.ok(pend);
+  await admin('POST', `/admin/membership-payments/${pend.id}/confirm`);
+  assert.equal((await c('GET', '/auth/me')).body.user.member, true);
+});
+
+test('Mercado Pago: genera el link de pago y acredita con la notificación', async () => {
+  const realFetch = globalThis.fetch;
+  const payments = {};
+  let lastPref = null;
+  globalThis.fetch = async (url, opts = {}) => {
+    const u = String(url);
+    if (!u.startsWith('https://api.mercadopago.com')) return realFetch(url, opts);
+    const json = data => new Response(JSON.stringify(data), { status: 200, headers: { 'content-type': 'application/json' } });
+    if (u.endsWith('/checkout/preferences')) { lastPref = JSON.parse(opts.body); return json({ id: 'PREF1', init_point: 'https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=PREF1' }); }
+    const m = u.match(/\/v1\/payments\/(\d+)$/); if (m) return json(payments[m[1]]);
+    if (u.includes('/v1/payments/search')) { const ref = new URL(u).searchParams.get('external_reference'); return json({ results: Object.values(payments).filter(p => p.external_reference === ref) }); }
+    return new Response('{}', { status: 404 });
+  };
+  process.env.MP_ACCESS_TOKEN = 'TEST-TOKEN';
+  try {
+    const c = client();
+    await c('POST', '/auth/register', { name: 'Marta MP', email: 'mp@x.com', password: '12345678', birthdate: adult });
+    const methods = (await c('GET', '/payment-methods')).body.methods.map(m => m.id);
+    assert.ok(methods.includes('mercadopago'));
+    assert.ok(!methods.includes('prueba'), 'con Mercado Pago activo no se ofrece el pago de prueba');
+    const r = await c('POST', '/orders', { items: [{ slug: 'komatsu-frutado-720', qty: 1 }], delivery: 'envio', paymentMethod: 'mercadopago', ...ship });
+    assert.equal(r.status, 201);
+    assert.match(r.body.checkoutUrl, /mercadopago/);
+    const code = r.body.order.code;
+    assert.equal(lastPref.external_reference, code);
+    assert.equal(lastPref.items.reduce((n, i) => n + i.unit_price * i.quantity, 0), r.body.order.total);
+    assert.match(lastPref.notification_url, /\/api\/payments\/mercadopago\/webhook$/);
+    // Notificación de un pago rechazado: no cambia nada
+    payments['111'] = { id: 111, status: 'rejected', external_reference: code };
+    await realFetch(base + '/payments/mercadopago/webhook', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type: 'payment', data: { id: '111' } }) });
+    await new Promise(r => setTimeout(r, 50));
+    assert.equal(db.prepare('SELECT status FROM orders WHERE code=?').get(code).status, 'pendiente_pago');
+    // Notificación de pago aprobado: el pedido queda pagado
+    payments['222'] = { id: 222, status: 'approved', external_reference: code };
+    await realFetch(base + '/payments/mercadopago/webhook', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ type: 'payment', data: { id: '222' } }) });
+    await new Promise(r => setTimeout(r, 50));
+    const row = db.prepare('SELECT status, provider_ref FROM orders WHERE code=?').get(code);
+    assert.equal(row.status, 'pagado'); assert.equal(row.provider_ref, 'MP-222');
+    // Club por Mercado Pago, acreditado al volver del pago
+    const sub = await c('POST', '/membership/subscribe', { acceptTerms: true, paymentMethod: 'mercadopago' });
+    assert.match(sub.body.checkoutUrl, /mercadopago/);
+    payments['333'] = { id: 333, status: 'approved', external_reference: sub.body.reference };
+    const back = await realFetch(base.replace('/api', '') + '/pago/retorno?ref=' + sub.body.reference, { redirect: 'manual' });
+    assert.equal(back.status, 302);
+    assert.equal((await c('GET', '/auth/me')).body.user.member, true);
+  } finally {
+    globalThis.fetch = realFetch;
+    delete process.env.MP_ACCESS_TOKEN;
+  }
 });
 
 test('escrituras sin JSON se rechazan (CSRF)', async () => {

@@ -47,7 +47,7 @@ sake/
 │   ├── auth.js             sesiones persistentes por cookie httpOnly + guards
 │   ├── membership.js       alta, baja al fin del período, renovación
 │   ├── pricing.js          cotización: precio público vs. socio, preventa, exclusivos, envío
-│   ├── payments.js         pasarela SIMULADA (punto de integración Mercado Pago)
+│   ├── payments.js         Mercado Pago, transferencia y pago de prueba
 │   └── routes/             auth · shop · club · admin
 ├── public/
 │   ├── index.html          shell: header, menú desplegable, puerta +18
@@ -94,6 +94,29 @@ en el navegador (lado mayor 1400 px) y reemplaza a la ilustración en el Shop, e
 la ficha y el carrito. **Quitar foto** vuelve a la ilustración. Ideal: foto vertical (4:5),
 botella centrada sobre fondo oscuro. Las fotos se guardan en `data/uploads/` (`UPLOADS_DIR`).
 
+## Cobros
+
+| Medio | Qué cubre | Cómo se activa |
+|---|---|---|
+| **Mercado Pago** (Checkout Pro) | Tarjetas de crédito y débito, dinero en cuenta, cuotas | Variable `MP_ACCESS_TOKEN` en el servidor con la credencial de producción |
+| **Transferencia bancaria** | Alias / CBU / CVU, con descuento opcional | Panel → Ajustes → Medios de pago: cargar alias o CBU |
+| Pago de prueba | Aprueba al instante | Sólo en desarrollo; nunca aparece con `NODE_ENV=production` ni con Mercado Pago activo |
+
+**Mercado Pago, paso a paso**
+1. En [Mercado Pago Developers](https://www.mercadopago.com.ar/developers) → *Tus integraciones* → crear una aplicación (Checkout Pro).
+2. Copiar el **Access Token de producción** y cargarlo en Render como variable de entorno `MP_ACCESS_TOKEN`.
+3. (Opcional) `PUBLIC_URL=https://tu-dominio` si la dirección pública difiere de la que ve el servidor.
+4. Las notificaciones llegan solas a `/api/payments/mercadopago/webhook` (se envía en cada pago); el servidor
+   vuelve a consultar cada pago a Mercado Pago antes de acreditarlo, así que no confía en lo que recibe.
+
+**Cómo funciona**
+- El pedido reserva el stock al confirmarse y queda *pendiente de pago*. Mercado Pago lo acredita solo; la
+  transferencia la confirma el administrador (Panel → Pedidos → *Confirmar pago*).
+- Si el pago no llega en el plazo (48 h por defecto para transferencia, 2 h para Mercado Pago), el pedido se
+  cancela y el stock se libera automáticamente.
+- El Club se paga mes a mes con los mismos medios. Desde 7 días antes del vencimiento, el socio paga el mes
+  siguiente en *Mi cuenta → Membresía*; las transferencias del Club se confirman en Panel → Socios.
+
 ## Reglas de negocio
 
 - **Precio de socio** (≈15% menos) aplicado por el servidor según la sesión; envío sin cargo para socios.
@@ -122,12 +145,13 @@ CSP estricta · límite de intentos en login/registro · todo el contenido se es
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | `admin@komatsu.local` / `komatsu-admin` |
 | `MEMBERSHIP_PRICE` | `20000` |
 | `SHIPPING_FLAT` / `FREE_SHIPPING_FROM` | `5000` / `60000` |
-| `NODE_ENV=production` | activa cookie `Secure` |
+| `NODE_ENV=production` | activa cookie `Secure` y desactiva el pago de prueba |
+| `MP_ACCESS_TOKEN` | credencial de Mercado Pago (activa el cobro con tarjetas) |
+| `PUBLIC_URL` | dirección pública, para los links de retorno de Mercado Pago |
 
 ## Pendiente para producción
 
-1. **Pagos reales:** reemplazar `src/payments.js` por Mercado Pago (Checkout Pro para pedidos,
-   suscripciones/preapproval para el Club) y confirmar pagos por webhook.
+1. **Pagos:** cargar `MP_ACCESS_TOKEN` y los datos bancarios (ver *Cobros*). Opcional: débito automático del Club con suscripciones de Mercado Pago.
 2. **Emails** (confirmación de pedido, bienvenida al Club, recupero de contraseña).
 3. **Fotos reales** de cada producto: se suben desde el panel admin (sin foto se muestra la ilustración).
 4. **Recorrido 360° real:** cambiar la foto por una panorámica equirectangular (por ejemplo con Pannellum).

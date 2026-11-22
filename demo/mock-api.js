@@ -9,6 +9,14 @@ export class ApiError extends Error {
 const KEY = 'komatsu.demo.db.v1';
 const MEMBERSHIP = 20000, MAX_QTY = 12;
 const SET = () => DB.settings || (DB.settings = { membership_price: 20000, shipping_flat: 5000, free_shipping_from: 60000, max_reserva: 2 });
+const DEFAULT_TEXT = { bank_holder: 'Bodega Komatsu (ejemplo)', bank_name: 'Banco de ejemplo', bank_cbu: '0000000000000000000000', bank_alias: 'KOMATSU.SAKE.DEMO', bank_cuit: '30-00000000-0', payment_contact: 'pagos@komatsu.demo' };
+const TEXT = () => DB.text || (DB.text = { ...DEFAULT_TEXT });
+const PAYSET = () => { const st = SET(); st.transfer_discount_pct ??= 5; st.transfer_expiry_hours ??= 48; return st; };
+const bank = () => { const t = TEXT(); return { holder: t.bank_holder, bank: t.bank_name, cbu: t.bank_cbu, alias: t.bank_alias, cuit: t.bank_cuit, contact: t.payment_contact }; };
+const METHODS = () => [
+  ...((TEXT().bank_alias || TEXT().bank_cbu) ? [{ id: 'transferencia', label: 'Transferencia bancaria', detail: `Te mostramos el alias y el CBU. Reservamos tu pedido por ${PAYSET().transfer_expiry_hours} horas.`, discountPct: PAYSET().transfer_discount_pct }] : []),
+  { id: 'prueba', label: 'Pago de prueba', detail: 'Demo: se aprueba al instante. En la tienda publicada se reemplaza por Mercado Pago (tarjetas, débito, dinero en cuenta y cuotas).', discountPct: 0 },
+];
 const DAY = 864e5;
 const now = () => new Date();
 const iso = d => new Date(d).toISOString();
@@ -158,7 +166,8 @@ function quote(items, member, delivery) {
   return { member, delivery, lines, issues, subtotal, savings: regular - subtotal, shipping, total: subtotal + shipping, freeShippingFrom: SET().free_shipping_from };
 }
 
-const orderView = o => ({ code: o.code, status: o.status, channel: o.channel, createdAt: o.created_at, email: DB.users.find(u => u.id === o.user_id)?.email,
+const orderView = o => ({ paymentMethod: o.payment_method || 'prueba', discount: o.discount || 0, expiresAt: o.expires_at || null, ...(o.status === 'pendiente_pago' && o.payment_method === 'transferencia' ? { bank: bank() } : {}),
+  code: o.code, status: o.status, channel: o.channel, createdAt: o.created_at, email: DB.users.find(u => u.id === o.user_id)?.email,
   subtotal: o.subtotal, savings: o.savings, shipping: o.shipping, total: o.total, delivery: o.delivery, shipTo: o.ship, notes: o.notes, items: o.items });
 
 const taken = (eid, exceptUser) => DB.rsvps.filter(r => r.event_id === eid && r.user_id !== exceptUser).reduce((n, r) => n + 1 + r.guests, 0);
@@ -213,6 +222,23 @@ function certView(c) {
 }
 const findCode = code => DB.codes.find(c => c.code === normCode(code)) || err(404, 'No encontramos ese código. Revisá que esté bien escrito.');
 
+function expireOrders() {
+  for (const o of DB.orders) if (o.status === 'pendiente_pago' && o.expires_at && new Date(o.expires_at) < now()) {
+    for (const it of o.items) DB.products.find(p => p.id === it.product_id).stock += it.qty;
+    o.status = 'cancelado';
+  }
+}
+function confirmClubPayment(p) {
+  if (p.status !== 'pendiente') return false;
+  let m = membershipOf(p.user_id);
+  const live = m && m.status === 'active' && new Date(m.current_period_end) > now();
+  const start = live ? m.current_period_end : iso(now()), end = addMonth(start);
+  if (m) Object.assign(m, { status: 'active', monthly_price: p.amount, current_period_end: end, cancel_at_period_end: 0 });
+  else DB.memberships.push({ user_id: p.user_id, status: 'active', monthly_price: p.amount, started_at: iso(now()), current_period_end: end, cancel_at_period_end: 0, member_number: `KM-${String(p.user_id).padStart(5, '0')}` });
+  Object.assign(p, { status: 'aprobado', period_start: start, period_end: end, ref: p.ref || 'confirmado-manual' });
+  return true;
+}
+
 // ---------- rutas ----------
 const routes = [
   ['GET', /^\/auth\/me$/, () => ({ user: me() })],
@@ -262,33 +288,38 @@ const routes = [
     const q = quote(b.items, member, delivery);
     if (q.issues.length) err(409, q.issues.map(i => i.message).join(' '), 'cart_issues');
     if (!q.lines.length) err(400, 'El carrito está vacío.');
+    const method = METHODS().find(x => x.id === b.paymentMethod)?.id || err(400, 'Elegí un medio de pago.');
+    const discount = method === 'transferencia' ? Math.round(q.subtotal * PAYSET().transfer_discount_pct / 100) : 0;
     for (const l of q.lines) DB.products.find(p => p.id === l.id).stock -= l.qty;
-    const o = { id: ++DB.seq, code: `KMT-${Date.now().toString(36).toUpperCase()}-${rand(4)}`, user_id: u.id, status: 'pagado', channel: member ? 'member' : 'publico',
-      subtotal: q.subtotal, savings: q.savings, shipping: q.shipping, total: q.total, delivery, ship, notes: s(b.notes ?? '', 0, 500, 'Notas') || null,
+    const o = { id: ++DB.seq, code: `KMT-${Date.now().toString(36).toUpperCase()}-${rand(4)}`, user_id: u.id, status: method === 'prueba' ? 'pagado' : 'pendiente_pago', channel: member ? 'member' : 'publico',
+      payment_method: method, discount, expires_at: method === 'transferencia' ? iso(Date.now() + PAYSET().transfer_expiry_hours * 36e5) : null,
+      subtotal: q.subtotal, savings: q.savings, shipping: q.shipping, total: q.subtotal - discount + q.shipping, delivery, ship, notes: s(b.notes ?? '', 0, 500, 'Notas') || null,
       created_at: iso(now()), items: q.lines.map(l => ({ product_id: l.id, name: `${l.name} ${l.volumeMl} ml · ${l.vintage}`, unitPrice: l.finalPrice, qty: l.qty })) };
     DB.orders.push(o); return { order: orderView(o) };
   }],
+  ['GET', /^\/payment-methods$/, () => ({ methods: METHODS() })],
   ['GET', /^\/orders$/, () => { const u = needUser(); return { orders: DB.orders.filter(o => o.user_id === u.id).sort((a, c) => c.id - a.id).map(orderView) }; }],
-  ['GET', /^\/orders\/([\w-]+)$/, (b, m) => { const u = needUser(); const o = DB.orders.find(x => x.code === m[1] && x.user_id === u.id) || err(404, 'Pedido no encontrado.'); return { order: orderView(o) }; }],
+  ['GET', /^\/orders\/([\w-]+)$/, (b, m) => { expireOrders(); const u = needUser(); const o = DB.orders.find(x => x.code === m[1] && x.user_id === u.id) || err(404, 'Pedido no encontrado.'); return { order: orderView(o) }; }],
 
   ['GET', /^\/club\/plan$/, () => ({ monthlyPrice: SET().membership_price, benefits: BENEFITS })],
-  ['GET', /^\/settings$/, () => ({ membershipPrice: SET().membership_price, shippingFlat: SET().shipping_flat, freeShippingFrom: SET().free_shipping_from, maxReserva: SET().max_reserva })],
+  ['GET', /^\/settings$/, () => ({ membershipPrice: SET().membership_price, shippingFlat: SET().shipping_flat, freeShippingFrom: SET().free_shipping_from, maxReserva: SET().max_reserva, transferDiscountPct: PAYSET().transfer_discount_pct, transferExpiryHours: PAYSET().transfer_expiry_hours })],
   ['GET', /^\/alliances$/, () => ({ alliances: [...DB.alliances].filter(a => a.active).sort((a, c) => a.sort - c.sort || a.id - c.id) })],
   ['GET', /^\/membership$/, () => {
     const u = needUser();
     return { membership: pubMembership(membershipOf(u.id)), payments: DB.payments.filter(p => p.user_id === u.id).reverse()
-      .map(p => ({ amount: p.amount, periodStart: p.period_start, periodEnd: p.period_end, status: p.status, ref: p.ref, createdAt: p.created_at })) };
+      .map(p => ({ id: p.id, amount: p.amount, periodStart: p.period_start, periodEnd: p.period_end, status: p.status, method: p.method || 'prueba', ref: p.ref, createdAt: p.created_at })) };
   }],
   ['POST', /^\/membership\/subscribe$/, (b) => {
     const u = needUser();
     if (b.acceptTerms !== true) err(400, 'Tenés que aceptar las condiciones del Club.');
-    if (isMember(u.id)) err(409, 'Ya sos socio del Club Komatsu.');
-    const start = iso(now()), end = addMonth(start);
-    let m = membershipOf(u.id);
-    if (m) Object.assign(m, { status: 'active', monthly_price: SET().membership_price, current_period_end: end, cancel_at_period_end: 0 });
-    else DB.memberships.push(m = { user_id: u.id, status: 'active', monthly_price: SET().membership_price, started_at: start, current_period_end: end, cancel_at_period_end: 0, member_number: `KM-${String(u.id).padStart(5, '0')}` });
-    DB.payments.push({ user_id: u.id, amount: SET().membership_price, period_start: start, period_end: end, status: 'aprobado', ref: `SIM-SUB-${u.id}-${rand(4)}`, created_at: start });
-    return { membership: pubMembership(m) };
+    const method = METHODS().find(x => x.id === b.paymentMethod)?.id || err(400, 'Elegí un medio de pago.');
+    const ms = membershipOf(u.id);
+    if (ms && isMember(u.id) && new Date(ms.current_period_end) - now() > 7 * DAY) err(409, 'Ya sos socio del Club Komatsu. Podés pagar el próximo mes desde 7 días antes del vencimiento.');
+    if (method === 'transferencia' && DB.payments.some(p => p.user_id === u.id && p.status === 'pendiente')) err(409, 'Ya tenés un pago por transferencia pendiente de confirmación.');
+    const p = { id: ++DB.seq, user_id: u.id, amount: SET().membership_price, period_start: iso(now()), period_end: iso(now()), status: 'pendiente', method, ref: method === 'prueba' ? `PRUEBA-${rand(4)}` : null, created_at: iso(now()) };
+    DB.payments.push(p);
+    if (method === 'prueba') confirmClubPayment(p);
+    return { membership: pubMembership(membershipOf(u.id)), pending: method !== 'prueba', checkoutUrl: null, amount: p.amount, reference: `CLUB-${p.id}`, ...(method === 'transferencia' ? { bank: bank() } : {}) };
   }],
   ['POST', /^\/membership\/(cancel|resume)$/, (b, m) => {
     const u = needUser();
@@ -347,15 +378,18 @@ const routes = [
   ['GET', /^\/admin\/summary$/, () => {
     needAdmin();
     const live = DB.memberships.filter(m => m.status === 'active' && new Date(m.current_period_end) > now());
-    return { revenue: DB.orders.filter(o => o.status !== 'cancelado').reduce((n, o) => n + o.total, 0), orders: DB.orders.length,
+    expireOrders();
+    return { awaitingPayment: DB.orders.filter(o => o.status === 'pendiente_pago').length + DB.payments.filter(p => p.status === 'pendiente').length,
+      revenue: DB.orders.filter(o => !['cancelado', 'pendiente_pago'].includes(o.status)).reduce((n, o) => n + o.total, 0), orders: DB.orders.length,
       pending: DB.orders.filter(o => ['pagado', 'preparando'].includes(o.status)).length, users: DB.users.filter(u => u.role === 'customer').length,
       members: live.length, mrr: live.filter(m => !m.cancel_at_period_end).reduce((n, m) => n + m.monthly_price, 0) };
   }],
-  ['GET', /^\/admin\/orders$/, () => { needAdmin(); return { orders: [...DB.orders].sort((a, c) => c.id - a.id).map(orderView), statuses: ['pagado', 'preparando', 'enviado', 'entregado', 'cancelado'] }; }],
+  ['GET', /^\/admin\/orders$/, () => { needAdmin(); return { orders: [...DB.orders].sort((a, c) => c.id - a.id).map(orderView), statuses: ['pendiente_pago', 'pagado', 'preparando', 'enviado', 'entregado', 'cancelado'] }; }],
   ['PATCH', /^\/admin\/orders\/([\w-]+)$/, (b, m) => {
     needAdmin();
     const o = DB.orders.find(x => x.code === m[1]) || err(404, 'Pedido no encontrado.');
-    if (!['pagado', 'preparando', 'enviado', 'entregado', 'cancelado'].includes(b.status)) err(400, 'Estado inválido.');
+    if (!['pendiente_pago', 'pagado', 'preparando', 'enviado', 'entregado', 'cancelado'].includes(b.status)) err(400, 'Estado inválido.');
+    if (o.status === 'cancelado' && b.status !== 'cancelado') err(409, 'Un pedido cancelado no se puede reactivar: el stock ya se liberó.');
     if (b.status === 'cancelado' && o.status !== 'cancelado') for (const it of o.items) DB.products.find(p => p.id === it.product_id).stock += it.qty;
     o.status = b.status; return { ok: true };
   }],
@@ -412,10 +446,23 @@ const routes = [
   ['PATCH', /^\/admin\/alliances\/(\d+)$/, (b, m) => { needAdmin(); const a = DB.alliances.find(x => x.id === Number(m[1])) || err(404, 'No encontrado.'); Object.assign(a, allyFields(b)); return { ok: true }; }],
   ['DELETE', /^\/admin\/alliances\/(\d+)$/, (b, m) => { needAdmin(); DB.alliances = DB.alliances.filter(x => x.id !== Number(m[1])); return { ok: true }; }],
 
-  ['GET', /^\/admin\/settings$/, () => { needAdmin(); return { settings: { ...SET() }, labels: { membership_price: 'Cuota mensual del Club', shipping_flat: 'Costo de envío', free_shipping_from: 'Envío sin cargo desde', max_reserva: 'Tope por socio en exclusivos' } }; }],
+  ['GET', /^\/admin\/membership-payments$/, () => {
+    needAdmin();
+    return { payments: DB.payments.filter(p => p.status === 'pendiente').map(p => { const u = DB.users.find(x => x.id === p.user_id); return { id: p.id, amount: p.amount, method: p.method, status: p.status, createdAt: p.created_at, name: u?.name, email: u?.email }; }) };
+  }],
+  ['POST', /^\/admin\/membership-payments\/(\d+)\/(confirm|reject)$/, (b, m) => {
+    needAdmin();
+    const p = DB.payments.find(x => x.id === Number(m[1]) && x.status === 'pendiente') || err(409, 'Ese pago ya no está pendiente.');
+    if (m[2] === 'confirm') confirmClubPayment(p); else p.status = 'rechazado';
+    return { ok: true };
+  }],
+  ['GET', /^\/admin\/settings$/, () => { needAdmin(); PAYSET(); return { settings: { ...SET() }, text: { ...TEXT() }, payments: { mercadopago: false, test: true },
+    textLabels: { bank_holder: 'Titular de la cuenta', bank_name: 'Banco', bank_cbu: 'CBU o CVU', bank_alias: 'Alias', bank_cuit: 'CUIT del titular', payment_contact: 'Contacto para enviar el comprobante (WhatsApp o email)' },
+    labels: { membership_price: 'Cuota mensual del Club', shipping_flat: 'Costo de envío', free_shipping_from: 'Envío sin cargo desde', max_reserva: 'Tope por socio en exclusivos', transfer_discount_pct: 'Descuento por transferencia (%)', transfer_expiry_hours: 'Horas de reserva para pagar por transferencia' } }; }],
   ['PATCH', /^\/admin\/settings$/, (b) => {
     needAdmin();
-    for (const k of ['membership_price', 'shipping_flat', 'free_shipping_from', 'max_reserva']) if (b[k] !== undefined) {
+    if (b.text && typeof b.text === 'object') for (const k of Object.keys(DEFAULT_TEXT)) if (b.text[k] !== undefined) TEXT()[k] = String(b.text[k]).trim().slice(0, 120);
+    for (const k of ['membership_price', 'shipping_flat', 'free_shipping_from', 'max_reserva', 'transfer_discount_pct', 'transfer_expiry_hours']) if (b[k] !== undefined) {
       const n = Number(b[k]); if (!Number.isInteger(n) || n < (k === 'max_reserva' ? 1 : 0)) err(400, 'Valor inválido.'); SET()[k] = n;
     }
     return { settings: { ...SET() } };

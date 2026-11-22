@@ -8,6 +8,7 @@ import shopRoutes from './routes/shop.js';
 import clubRoutes from './routes/club.js';
 import adminRoutes from './routes/admin.js';
 import certificateRoutes from './routes/certificates.js';
+import paymentRoutes from './routes/payments.js';
 
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
@@ -28,7 +29,10 @@ export function createApp(db, { uploadsDir } = {}) {
 
   // Las fotos de producto viajan en base64: sólo esa ruta acepta cuerpos grandes.
   app.use('/api/admin/products/:id/photo', express.json({ limit: '8mb' }));
+  const payments = paymentRoutes(db);
   app.use('/api', express.json({ limit: '50kb' }), (req, res, next) => { req.body ??= {}; next(); });
+  // Notificaciones de Mercado Pago: no usan la sesión y se verifican consultando el pago, así que van antes del filtro CSRF.
+  app.use('/api', payments.api);
   // Protección CSRF: las escrituras a la API deben ser JSON (un formulario de otro sitio no puede enviarlo).
   app.use('/api', (req, res, next) => {
     if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method) && !req.is('application/json'))
@@ -52,6 +56,7 @@ export function createApp(db, { uploadsDir } = {}) {
       target: { namespace: 'android_app', package_name: process.env.ANDROID_PACKAGE || 'com.bodegakomatsu.app', sha256_cert_fingerprints: fingerprints },
     }] : []);
   });
+  app.use(payments.page);
   app.get('/sw.js', (req, res, next) => { res.set('Cache-Control', 'no-cache'); next(); });
   if (uploadsDir) app.use('/uploads', express.static(uploadsDir, { maxAge: '7d', fallthrough: false }));
   app.use(express.static(PUBLIC, { maxAge: '1h', index: 'index.html' }));

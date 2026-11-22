@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS membership_payments (
   period_end   TEXT NOT NULL,
   status       TEXT NOT NULL,
   provider_ref TEXT,
+  method       TEXT NOT NULL DEFAULT 'prueba',
   created_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -78,7 +79,7 @@ CREATE TABLE IF NOT EXISTS orders (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   code           TEXT NOT NULL UNIQUE,
   user_id        INTEGER NOT NULL REFERENCES users(id),
-  status         TEXT NOT NULL CHECK (status IN ('pagado','preparando','enviado','entregado','cancelado')),
+  status         TEXT NOT NULL CHECK (status IN ('pendiente_pago','pagado','preparando','enviado','entregado','cancelado')),
   channel        TEXT NOT NULL CHECK (channel IN ('publico','member')),
   subtotal       INTEGER NOT NULL,
   savings        INTEGER NOT NULL DEFAULT 0,
@@ -93,6 +94,10 @@ CREATE TABLE IF NOT EXISTS orders (
   ship_zip       TEXT,
   notes          TEXT,
   provider_ref   TEXT,
+  payment_method TEXT NOT NULL DEFAULT 'prueba',
+  discount       INTEGER NOT NULL DEFAULT 0,
+  expires_at     TEXT,
+  paid_at        TEXT,
   created_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -241,6 +246,22 @@ export function openDb(file) {
     db.exec('ALTER TABLE events ADD COLUMN active INTEGER NOT NULL DEFAULT 1');
   if (!db.prepare("SELECT 1 FROM pragma_table_info('products') WHERE name='ingredients'").get())
     db.exec('ALTER TABLE products ADD COLUMN ingredients TEXT');
+  // Migración: pedidos con pago pendiente (bases creadas antes de los medios de pago reales)
+  const ordersSql = db.prepare("SELECT sql FROM sqlite_master WHERE name='orders'").get()?.sql || '';
+  if (!ordersSql.includes('pendiente_pago')) {
+    // Método recomendado por SQLite: tabla nueva, copiar, borrar la vieja y renombrar (las referencias a «orders» siguen válidas).
+    const ddl = SCHEMA.slice(SCHEMA.indexOf('CREATE TABLE IF NOT EXISTS orders'), SCHEMA.indexOf('CREATE TABLE IF NOT EXISTS order_items'))
+      .replace('CREATE TABLE IF NOT EXISTS orders', 'CREATE TABLE orders_new');
+    const cols = db.prepare("SELECT name FROM pragma_table_info('orders')").all().map(c => c.name).join(',');
+    db.exec('PRAGMA foreign_keys = OFF; BEGIN;');
+    try {
+      db.exec(ddl);
+      db.exec(`INSERT INTO orders_new (${cols}) SELECT ${cols} FROM orders; DROP TABLE orders; ALTER TABLE orders_new RENAME TO orders;`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id); COMMIT;');
+    } catch (e) { db.exec('ROLLBACK'); throw e; } finally { db.exec('PRAGMA foreign_keys = ON;'); }
+  }
+  if (!db.prepare("SELECT 1 FROM pragma_table_info('membership_payments') WHERE name='method'").get())
+    db.exec("ALTER TABLE membership_payments ADD COLUMN method TEXT NOT NULL DEFAULT 'prueba'");
   // Migración: foto real del producto (ruta pública /uploads/...)
   if (!db.prepare("SELECT 1 FROM pragma_table_info('products') WHERE name='photo'").get())
     db.exec('ALTER TABLE products ADD COLUMN photo TEXT');

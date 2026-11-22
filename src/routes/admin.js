@@ -3,11 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { requireAdmin } from '../auth.js';
-import { getOrder } from './shop.js';
+import { getOrder, markOrderPaid, cancelOrder } from './shop.js';
+import { confirmMembershipPayment } from '../membership.js';
+import { mpEnabled, testPaymentsEnabled } from '../payments.js';
 import { HttpError, int, str } from '../security.js';
-import { getSettings, setSettings, SETTINGS } from '../settings.js';
+import { getSettings, setSettings, SETTINGS, getTextSettings, setTextSettings, TEXT_SETTINGS } from '../settings.js';
 
-const STATUSES = ['pagado', 'preparando', 'enviado', 'entregado', 'cancelado'];
+const STATUSES = ['pendiente_pago', 'pagado', 'preparando', 'enviado', 'entregado', 'cancelado'];
 
 const MIME = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
 
@@ -18,7 +20,8 @@ export default function adminRoutes(db, { uploadsDir } = {}) {
   r.get('/summary', (req, res) => {
     const one = sql => db.prepare(sql).get().n;
     res.json({
-      revenue: one(`SELECT COALESCE(SUM(total),0) n FROM orders WHERE status<>'cancelado'`),
+      revenue: one(`SELECT COALESCE(SUM(total),0) n FROM orders WHERE status NOT IN ('cancelado','pendiente_pago')`),
+      awaitingPayment: one(`SELECT COUNT(*) n FROM orders WHERE status='pendiente_pago'`) + one(`SELECT COUNT(*) n FROM membership_payments WHERE status='pendiente'`),
       orders: one('SELECT COUNT(*) n FROM orders'),
       pending: one(`SELECT COUNT(*) n FROM orders WHERE status IN ('pagado','preparando')`),
       users: one(`SELECT COUNT(*) n FROM users WHERE role='customer'`),
@@ -37,16 +40,10 @@ export default function adminRoutes(db, { uploadsDir } = {}) {
     if (!STATUSES.includes(status)) throw new HttpError(400, 'Estado inválido.');
     const o = db.prepare('SELECT id,status FROM orders WHERE code=?').get(req.params.code);
     if (!o) throw new HttpError(404, 'Pedido no encontrado.');
-    db.exec('BEGIN');
-    try {
-      // Cancelar devuelve el stock
-      if (status === 'cancelado' && o.status !== 'cancelado') {
-        for (const it of db.prepare('SELECT product_id, qty FROM order_items WHERE order_id=?').all(o.id))
-          db.prepare('UPDATE products SET stock = stock + ? WHERE id=?').run(it.qty, it.product_id);
-      }
-      db.prepare('UPDATE orders SET status=? WHERE id=?').run(status, o.id);
-      db.exec('COMMIT');
-    } catch (e) { db.exec('ROLLBACK'); throw e; }
+    if (status === 'cancelado') cancelOrder(db, o.id); // devuelve el stock
+    else if (o.status === 'pendiente_pago' && status === 'pagado') markOrderPaid(db, req.params.code, req.body.ref || 'confirmado-manual');
+    else if (o.status === 'cancelado') throw new HttpError(409, 'Un pedido cancelado no se puede reactivar: el stock ya se liberó.');
+    else db.prepare('UPDATE orders SET status=? WHERE id=?').run(status, o.id);
     res.json({ ok: true });
   });
 
@@ -206,12 +203,31 @@ export default function adminRoutes(db, { uploadsDir } = {}) {
     res.json({ ok: true });
   });
 
+  // ---------- Pagos del Club pendientes (transferencias) ----------
+  r.get('/membership-payments', (req, res) => {
+    res.json({ payments: db.prepare(`SELECT p.id, p.amount, p.method, p.status, p.created_at AS createdAt, u.name, u.email
+      FROM membership_payments p JOIN users u ON u.id=p.user_id WHERE p.status='pendiente' ORDER BY p.id DESC`).all().map(x => ({ ...x })) });
+  });
+  r.post('/membership-payments/:id/confirm', (req, res) => {
+    if (!confirmMembershipPayment(db, int(req.params.id, { min: 1 }), 'confirmado-manual')) throw new HttpError(409, 'Ese pago ya no está pendiente.');
+    res.json({ ok: true });
+  });
+  r.post('/membership-payments/:id/reject', (req, res) => {
+    db.prepare("UPDATE membership_payments SET status='rechazado' WHERE id=? AND status='pendiente'").run(int(req.params.id, { min: 1 }));
+    res.json({ ok: true });
+  });
+
   // ---------- Ajustes ----------
-  r.get('/settings', (req, res) => res.json({ settings: getSettings(db), labels: Object.fromEntries(Object.entries(SETTINGS).map(([k, v]) => [k, v.label])) }));
+  r.get('/settings', (req, res) => res.json({
+    settings: getSettings(db), labels: Object.fromEntries(Object.entries(SETTINGS).map(([k, v]) => [k, v.label])),
+    text: getTextSettings(db), textLabels: TEXT_SETTINGS,
+    payments: { mercadopago: mpEnabled(), test: testPaymentsEnabled() },
+  }));
   r.patch('/settings', (req, res) => {
     const values = {};
-    for (const [k, s] of Object.entries(SETTINGS)) if (req.body[k] !== undefined) values[k] = int(req.body[k], { min: s.min, max: 1e9, field: s.label });
+    for (const [k, s] of Object.entries(SETTINGS)) if (req.body[k] !== undefined) values[k] = int(req.body[k], { min: s.min, max: s.max ?? 1e9, field: s.label });
     setSettings(db, values);
+    if (req.body.text && typeof req.body.text === 'object') setTextSettings(db, req.body.text);
     res.json({ settings: getSettings(db) });
   });
 

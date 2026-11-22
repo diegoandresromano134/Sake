@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { requireAuth, requireMember } from '../auth.js';
-import { getMembership, publicMembership, subscribe, setCancel } from '../membership.js';
+import { getMembership, publicMembership, startMembershipPayment, setCancel } from '../membership.js';
+import { paymentMethods, createCheckout, bankInfo } from '../payments.js';
+import { baseUrl } from './shop.js';
 import { getSettings, publicSettings } from '../settings.js';
 import { HttpError, int } from '../security.js';
 
@@ -20,14 +22,31 @@ export default function clubRoutes(db) {
   }));
 
   r.get('/membership', requireAuth, (req, res) => {
-    const payments = db.prepare('SELECT amount, period_start AS periodStart, period_end AS periodEnd, status, provider_ref AS ref, created_at AS createdAt FROM membership_payments WHERE user_id=? ORDER BY id DESC').all(req.user.id);
+    const payments = db.prepare("SELECT id, amount, period_start AS periodStart, period_end AS periodEnd, status, provider_ref AS ref, method, created_at AS createdAt FROM membership_payments WHERE user_id=? AND status<>'cancelado' ORDER BY id DESC").all(req.user.id);
     res.json({ membership: publicMembership(getMembership(db, req.user.id)), payments: payments.map(p => ({ ...p })) });
   });
 
   r.post('/membership/subscribe', requireAuth, async (req, res) => {
     if (req.body.acceptTerms !== true) throw new HttpError(400, 'Tenés que aceptar las condiciones del Club.');
-    const m = await subscribe(db, req.user.id);
-    res.status(201).json({ membership: publicMembership(m) });
+    const methods = paymentMethods(db);
+    const method = methods.find(m => m.id === req.body.paymentMethod)?.id;
+    if (!method) throw new HttpError(400, methods.length ? 'Elegí un medio de pago.' : 'Los pagos todavía no están configurados.');
+    const { paymentId, amount } = startMembershipPayment(db, req.user.id, method);
+    let checkoutUrl = null;
+    if (method === 'mercadopago') {
+      try {
+        ({ url: checkoutUrl } = await createCheckout({ reference: `CLUB-${paymentId}`, title: 'Club Komatsu: un mes',
+          items: [{ id: 'club', title: 'Club Komatsu · membresía mensual', qty: 1, unitPrice: amount }], payerEmail: req.user.email, baseUrl: baseUrl(req) }));
+      } catch {
+        db.prepare("UPDATE membership_payments SET status='cancelado' WHERE id=?").run(paymentId);
+        throw new HttpError(502, 'No pudimos conectar con Mercado Pago. Probá de nuevo o elegí transferencia.');
+      }
+    }
+    res.status(201).json({
+      membership: publicMembership(getMembership(db, req.user.id)),
+      pending: method !== 'prueba', checkoutUrl, amount, reference: `CLUB-${paymentId}`,
+      ...(method === 'transferencia' ? { bank: bankInfo(db) } : {}),
+    });
   });
   r.post('/membership/cancel', requireAuth, (req, res) => res.json({ membership: publicMembership(setCancel(db, req.user.id, true)) }));
   r.post('/membership/resume', requireAuth, (req, res) => res.json({ membership: publicMembership(setCancel(db, req.user.id, false)) }));

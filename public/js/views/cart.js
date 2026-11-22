@@ -2,6 +2,7 @@ import { api } from '../api.js';
 import { esc, eyebrow, productArt, money, toast, formData, dateFmt } from '../ui.js';
 import { state, setQty, clearCart } from '../store.js';
 import { needLogin, go } from '../app.js';
+import { methodPicker, wireMethodPicker, bankBox, wireCopy, STATUS_LABEL, METHOD_LABEL } from '../payments-ui.js';
 
 let delivery = 'envio';
 
@@ -12,9 +13,10 @@ function summary(q, cta) {
     <div class="sum-row"><span>Subtotal</span><span>${money(q.subtotal)}</span></div>
     ${q.savings ? `<div class="sum-row save"><span>Ahorro socio</span><span>−${money(q.savings)}</span></div>` : ''}
     <div class="sum-row"><span>Envío</span><span>${q.shipping ? money(q.shipping) : 'Sin cargo'}</span></div>
+    ${cta.startsWith('<div class="sum-row') ? cta : ''}
     <div class="sum-row total"><span>Total</span><span>${money(q.total)}</span></div>
     ${!q.member && q.delivery === 'envio' && q.shipping ? `<p class="muted" style="font-size:12px">Envío sin cargo desde ${money(q.freeShippingFrom)} o siendo socio.</p>` : ''}
-    ${cta}
+    ${cta.startsWith('<div class="sum-row') ? '' : cta}
   </aside>`;
 }
 
@@ -62,9 +64,17 @@ export async function checkoutView() {
   if (!state.user) return needLogin();
   if (!state.cart.length) return emptyCart();
   const quoteFor = d => api('/cart/quote', { method: 'POST', body: { items: state.cart, delivery: d } });
-  let q = await quoteFor(delivery);
+  let [q, { methods }] = await Promise.all([quoteFor(delivery), api('/payment-methods')]);
   if (q.issues.length) { go('carrito'); return null; }
   const u = state.user;
+  let method = methods[0]?.id || null;
+  const totalFor = () => {
+    const pct = methods.find(m => m.id === method)?.discountPct || 0;
+    const disc = Math.round(q.subtotal * pct / 100);
+    return { disc, total: q.subtotal - disc + q.shipping };
+  };
+  const payLabel = () => method === 'transferencia' ? `Confirmar pedido · ${money(totalFor().total)}` : method === 'mercadopago' ? `Pagar con Mercado Pago · ${money(totalFor().total)}` : `Pagar ${money(totalFor().total)}`;
+  const sumHtml = () => { const t = totalFor(); return summary({ ...q, total: t.total }, t.disc ? `<div class="sum-row save"><span>Descuento por transferencia</span><span>−${money(t.disc)}</span></div>` : ''); };
   return {
     title: 'Checkout',
     html: `<section class="section"><div class="container">
@@ -88,15 +98,12 @@ export async function checkoutView() {
             </div>
           </fieldset>
           <div class="field"><label for="notes">Notas (opcional)</label><textarea id="notes" name="notes" maxlength="500" placeholder="Horario de entrega, regalo, etc."></textarea></div>
-          <div class="panel" style="background:var(--black)">
-            <p class="label" style="margin:0 0 6px">Pago</p>
-            <p class="muted" style="margin:0;font-size:14px">Modo demostración: el pago se aprueba automáticamente. Preparado para integrar Mercado Pago.</p>
-          </div>
+          <div class="field"><span class="label">Medio de pago</span>${methodPicker(methods, method)}</div>
           <label class="check"><input type="checkbox" name="adult" required> Confirmo que soy mayor de 18 años y que quien reciba el pedido también lo es.</label>
           <p class="error-msg" id="err" hidden></p>
-          <button class="btn gold block" type="submit" id="pay">Pagar ${money(q.total)}</button>
+          <button class="btn gold block" type="submit" id="pay" ${method ? '' : 'disabled'}>${payLabel()}</button>
         </form>
-        <div id="sum">${summary(q, '')}</div>
+        <div id="sum">${sumHtml()}</div>
       </div></div></section>`,
     mount(root) {
       const form = root.querySelector('#co'), err = root.querySelector('#err'), pay = root.querySelector('#pay');
@@ -105,20 +112,22 @@ export async function checkoutView() {
         root.querySelectorAll('[data-del]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
         root.querySelector('#ship').hidden = delivery === 'retiro';
         q = await quoteFor(delivery);
-        root.querySelector('#sum').innerHTML = summary(q, '');
-        pay.textContent = `Pagar ${money(q.total)}`;
+        root.querySelector('#sum').innerHTML = sumHtml();
+        pay.textContent = payLabel();
       }));
+      wireMethodPicker(root, m => { method = m; root.querySelector('#sum').innerHTML = sumHtml(); pay.textContent = payLabel(); });
       form.addEventListener('submit', async e => {
         e.preventDefault(); err.hidden = true;
         const data = formData(form);
         if (!data.adult) { err.textContent = 'Tenés que confirmar la mayoría de edad.'; err.hidden = false; return; }
         pay.disabled = true; pay.textContent = 'Procesando…';
         try {
-          const { order } = await api('/orders', { method: 'POST', body: { ...data, delivery, items: state.cart } });
+          const { order, checkoutUrl } = await api('/orders', { method: 'POST', body: { ...data, delivery, items: state.cart, paymentMethod: method } });
           clearCart();
+          if (checkoutUrl) { pay.textContent = 'Te llevamos a Mercado Pago…'; location.href = checkoutUrl; return; }
           go('pedido/' + order.code);
         } catch (ex) {
-          err.textContent = ex.message; err.hidden = false; pay.disabled = false; pay.textContent = `Pagar ${money(q.total)}`;
+          err.textContent = ex.message; err.hidden = false; pay.disabled = false; pay.textContent = payLabel();
           if (ex.status === 401) needLogin();
         }
       });
@@ -129,27 +138,39 @@ export async function checkoutView() {
 export function orderDetail(o) {
   return `<div class="order">
     <div class="order-head"><strong style="font-weight:500;letter-spacing:.08em">${esc(o.code)}</strong>
-      <span class="row"><span class="badge ${o.channel === 'member' ? 'gold' : ''}">${o.channel === 'member' ? 'Member Shop' : 'Shop Público'}</span><span class="status ${esc(o.status)}">${esc(o.status)}</span></span></div>
+      <span class="row"><span class="badge ${o.channel === 'member' ? 'gold' : ''}">${o.channel === 'member' ? 'Member Shop' : 'Shop Público'}</span><span class="status ${esc(o.status)}">${esc(STATUS_LABEL[o.status] || o.status)}</span></span></div>
     <div class="muted" style="font-size:13px">${dateFmt(o.createdAt)} · ${o.delivery === 'retiro' ? 'Retiro en bodega' : `Envío a ${esc([o.shipTo.address, o.shipTo.city, o.shipTo.province].filter(Boolean).join(', '))}`}</div>
     <ul>${o.items.map(i => `<li>${i.qty} × ${esc(i.name)} — ${money(i.unitPrice * i.qty)}</li>`).join('')}</ul>
     <div class="row" style="justify-content:space-between;font-size:14px">
-      <span class="muted">Envío ${o.shipping ? money(o.shipping) : 'sin cargo'}${o.savings ? ` · Ahorro socio ${money(o.savings)}` : ''}</span>
+      <span class="muted">Envío ${o.shipping ? money(o.shipping) : 'sin cargo'}${o.savings ? ` · Ahorro socio ${money(o.savings)}` : ''}${o.discount ? ` · Descuento transferencia ${money(o.discount)}` : ''}${o.paymentMethod ? ` · ${esc(METHOD_LABEL[o.paymentMethod] || o.paymentMethod)}` : ''}</span>
       <strong style="font-weight:500">Total ${money(o.total)}</strong></div></div>`;
 }
 
 export async function orderView({ params }) {
   if (!state.user) return needLogin();
   const { order } = await api('/orders/' + encodeURIComponent(params[0]));
+  const pending = order.status === 'pendiente_pago', cancelled = order.status === 'cancelado';
+  const head = cancelled
+    ? '<h1 style="margin-top:18px">Pedido cancelado<span class="title-jp">キャンセル</span></h1><p class="muted">El plazo de pago venció o el pedido se canceló. Podés volver a comprar cuando quieras.</p>'
+    : pending && order.paymentMethod === 'transferencia'
+      ? '<h1 style="margin-top:18px">¡Pedido reservado!<span class="title-jp">ご予約ありがとうございます</span></h1><p class="muted">Sólo falta la transferencia. Apenas la confirmemos, preparamos tu pedido.</p>'
+      : pending
+        ? '<h1 style="margin-top:18px">Esperando el pago<span class="title-jp">お支払い確認中</span></h1><p class="muted">Si ya pagaste en Mercado Pago, la confirmación puede tardar unos minutos.</p>'
+        : '<h1 style="margin-top:18px">¡Gracias por tu compra!<span class="title-jp">ありがとうございます</span></h1><p class="muted">Te avisaremos cuando tu pedido esté en camino.</p>';
   return {
-    title: 'Pedido confirmado',
+    title: pending ? 'Pedido pendiente de pago' : cancelled ? 'Pedido cancelado' : 'Pedido confirmado',
     html: `<section class="section"><div class="container" style="max-width:760px">
       <div style="text-align:center;margin-bottom:32px">
         <div class="hanko big" aria-hidden="true"><span>小</span><span>松</span></div>
-        <h1 style="margin-top:18px">¡Gracias por tu compra!<span class="title-jp">ありがとうございます</span></h1>
-        <p class="muted">Te avisaremos por email cuando tu pedido esté en camino.</p>
+        ${head}
       </div>
+      ${pending && order.bank ? bankBox({ bank: order.bank, amount: order.total, reference: order.code, expiresAt: order.expiresAt }) : ''}
       ${orderDetail(order)}
-      <div class="row center" style="margin-top:24px"><a class="btn" href="#/cuenta">Ver mis pedidos</a><a class="btn ghost" href="#/shop">Seguir comprando</a></div>
+      <div class="row center" style="margin-top:24px">${pending && order.paymentMethod === 'mercadopago' ? '<button class="btn gold" id="recheck">Ya pagué: actualizar</button>' : ''}<a class="btn" href="#/cuenta">Ver mis pedidos</a><a class="btn ghost" href="#/shop">Seguir comprando</a></div>
     </div></section>`,
+    mount(root) {
+      wireCopy(root);
+      root.querySelector('#recheck')?.addEventListener('click', () => window.dispatchEvent(new HashChangeEvent('hashchange')));
+    },
   };
 }

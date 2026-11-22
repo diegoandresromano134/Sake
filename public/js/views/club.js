@@ -2,6 +2,7 @@ import { api } from '../api.js';
 import { esc, eyebrow, money, toast, dateFmt, timeFmt, hanko } from '../ui.js';
 import { state, isMember, isAdmin, refreshUser } from '../store.js';
 import { needLogin, go } from '../app.js';
+import { methodPicker, wireMethodPicker, bankBox, wireCopy } from '../payments-ui.js';
 
 export function memberCard(user) {
   const m = user.membership;
@@ -13,9 +14,14 @@ export function memberCard(user) {
 }
 
 export async function clubView() {
-  const plan = await api('/club/plan');
+  const [plan, { methods }] = await Promise.all([api('/club/plan'), api('/payment-methods')]);
   const member = isMember();
   const user = state.user;
+  const ms = user?.membership;
+  const daysLeft = ms?.active ? Math.ceil((new Date(ms.currentPeriodEnd) - Date.now()) / 864e5) : 0;
+  const canPay = !member || daysLeft <= 7; // alta, o pago del mes siguiente en los últimos 7 días
+  const renewal = member && canPay;
+  let method = methods.find(m => m.id !== 'transferencia')?.id || methods[0]?.id || null;
   return {
     title: 'Club Member',
     html: `
@@ -24,7 +30,7 @@ export async function clubView() {
       <h1>El Club Komatsu</h1>
       <p class="lead" style="margin:16px auto">Para quienes quieren cada cosecha primero. Precios de socio, tiradas limitadas y encuentros en la bodega.</p>
       <div class="price-tag">${money(plan.monthlyPrice)} <small>/ MES</small></div>
-      <p class="muted" style="font-size:13px">Débito mensual automático · Cancelás cuando quieras</p>
+      <p class="muted" style="font-size:13px">Se paga mes a mes · Sin permanencia</p>
       <div class="row center" style="margin-top:22px">
         ${member ? `<a class="btn gold" href="#/club/shop">Ir al Member Shop</a><a class="btn" href="#/club/socios">Área de socios</a>`
                  : `<button class="btn gold" id="join">Hacerme socio</button>`}
@@ -35,29 +41,39 @@ export async function clubView() {
       <h2 style="margin-bottom:28px">Lo que incluye tu membresía</h2>
       <div class="grid-3">${plan.benefits.map(b => `<div class="pillar benefit"><span class="jp">${esc(b.jp)}</span><h3 style="margin-top:8px">${esc(b.title)}</h3><p>${esc(b.text)}</p></div>`).join('')}</div>
     </div></section>
-    ${!member ? `<section class="section" id="alta"><div class="container" style="max-width:640px">
+    ${canPay ? `<section class="section" id="alta"><div class="container" style="max-width:640px">
       <div class="panel gold" id="join-panel">
-        <h2 style="font-size:22px">Alta de socio <span class="jp gold-text">入会</span></h2>
+        <h2 style="font-size:22px">${renewal ? 'Pagar el próximo mes' : 'Alta de socio'} <span class="jp gold-text">${renewal ? '更新' : '入会'}</span></h2>
         ${user ? `
-          <p class="muted">Vas a suscribirte como <strong>${esc(user.name)}</strong> (${esc(user.email)}).</p>
+          <p class="muted">${renewal ? `Tu membresía vence en ${daysLeft} día${daysLeft === 1 ? '' : 's'}. Pagá el mes siguiente y se suma al período actual.` : `Vas a suscribirte como <strong>${esc(user.name)}</strong> (${esc(user.email)}).`}</p>
           <div class="sum-row"><span>Membresía mensual</span><span>${money(plan.monthlyPrice)}</span></div>
           <div class="sum-row total"><span>Hoy pagás</span><span>${money(plan.monthlyPrice)}</span></div>
-          <label class="check" style="margin:16px 0"><input type="checkbox" id="terms"> Acepto la renovación mensual automática y las <a href="#/legal" class="gold-text">condiciones del Club</a>. Puedo cancelar en cualquier momento.</label>
-          <p class="muted" style="font-size:13px">Modo demostración: el pago se aprueba automáticamente (preparado para suscripciones de Mercado Pago).</p>
+          <div class="field" style="margin-top:16px"><span class="label">Medio de pago</span>${methodPicker(methods.map(m => ({ ...m, discountPct: 0 })), method)}</div>
+          <label class="check" style="margin:16px 0"><input type="checkbox" id="terms"> Acepto las <a href="#/legal" class="gold-text">condiciones del Club</a>. Se paga mes a mes y puedo dejar de pagar cuando quiera.</label>
           <p class="error-msg" id="err" hidden></p>
-          <button class="btn gold block" id="subscribe">Confirmar y pagar</button>`
+          <button class="btn gold block" id="subscribe" ${method ? '' : 'disabled'}>Confirmar y pagar</button>
+          <div id="pay-result"></div>`
         : `<p class="muted">Para sumarte al Club necesitás una cuenta.</p>
            <div class="row"><a class="btn gold" href="#/registro?next=club">Crear cuenta</a><a class="btn" href="#/login?next=club">Ya tengo cuenta</a></div>`}
       </div></div></section>` : ''}`,
     mount(root) {
       root.querySelector('#join')?.addEventListener('click', () => root.querySelector('#alta').scrollIntoView({ behavior: 'smooth' }));
+      wireMethodPicker(root, m => { method = m; });
       const btn = root.querySelector('#subscribe');
       btn?.addEventListener('click', async () => {
         const err = root.querySelector('#err'); err.hidden = true;
         if (!root.querySelector('#terms').checked) { err.textContent = 'Tenés que aceptar las condiciones del Club.'; err.hidden = false; return; }
         btn.disabled = true; btn.textContent = 'Procesando…';
         try {
-          await api('/membership/subscribe', { method: 'POST', body: { acceptTerms: true } });
+          const r = await api('/membership/subscribe', { method: 'POST', body: { acceptTerms: true, paymentMethod: method } });
+          if (r.checkoutUrl) { btn.textContent = 'Te llevamos a Mercado Pago…'; location.href = r.checkoutUrl; return; }
+          if (r.pending && r.bank) {
+            btn.hidden = true; root.querySelector('#terms').closest('label').hidden = true;
+            root.querySelector('#pay-result').innerHTML = bankBox({ bank: r.bank, amount: r.amount, reference: r.reference })
+              + '<p class="ok-msg" style="margin-top:12px">Listo: apenas confirmemos la transferencia se activa tu membresía. La ves en Mi cuenta → Membresía.</p>';
+            wireCopy(root);
+            return;
+          }
           await refreshUser();
           toast('¡Bienvenido al Club Komatsu! · 入会ありがとうございます');
           go('club/socios');

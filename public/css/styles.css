@@ -368,3 +368,19 @@ dialog.age-gate::backdrop { background: rgba(0,0,0,.92); }
 .cert.compact .cert-num { font-size: 36px; } .cert.compact .cert-spec { display: none; }
 .cert-list { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); }
 @media (max-width: 640px) { .cert { grid-template-columns: 1fr; } .cert-art { min-height: 200px; } }
+
+/* ---------- Medios de pago ---------- */
+.pay-methods { display: grid; gap: 8px; }
+.pay-method { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border: 1px solid var(--line); background: var(--black); cursor: pointer; }
+.pay-method.on { border-color: var(--gold); background: rgba(212,175,55,.06); }
+.pay-method input { accent-color: var(--gold); width: 18px; height: 18px; margin-top: 3px; flex: none; }
+.pay-body { display: grid; gap: 4px; font-size: 14px; }
+.field .pay-method { text-transform: none; letter-spacing: normal; font-size: 14px; color: var(--paper); }
+.pay-title { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.pay-body b { font-weight: 500; font-size: 15px; }
+.bank-box { display: grid; gap: 6px; margin-bottom: 24px; }
+.bank-amount { font-size: 34px; font-weight: 300; color: var(--gold-pale); margin: 0 0 8px; font-variant-numeric: tabular-nums; }
+.bank-row { display: grid; grid-template-columns: 110px 1fr auto; gap: 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.bank-val { font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; word-break: break-all; }
+.status.pendiente_pago { color: #F0C674; border-color: #8C7535; }
+@media (max-width: 480px) { .bank-row { grid-template-columns: 1fr auto; } .bank-row .label { grid-column: 1 / -1; } }

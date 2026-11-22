@@ -3,6 +3,7 @@ import { esc, eyebrow, money, toast, dateFmt, timeFmt, productArt, resizeImage }
 import { state, isAdmin } from '../store.js';
 import { needLogin, go } from '../app.js';
 import { orderDetail } from './cart.js';
+import { STATUS_LABEL } from '../payments-ui.js';
 
 const TABS = [
   ['pedidos', 'Pedidos'], ['productos', 'Productos'], ['ediciones', 'Ediciones numeradas'], ['degustaciones', 'Degustaciones'], ['anuncios', 'Anuncios y premios'],
@@ -138,7 +139,8 @@ export default async function admin({ query }) {
     body = orders.length ? orders.map(o => `<div>${orderDetail(o)}
       <div class="row" style="margin:-6px 0 22px;font-size:13px"><span class="muted">${esc(o.email)} · ${esc(o.shipTo.name)} · ${esc(o.shipTo.phone)}${o.shipTo.zip ? ` · CP ${esc(o.shipTo.zip)}` : ''}${o.notes ? ` · “${esc(o.notes)}”` : ''}</span>
         <label class="label" for="st-${esc(o.code)}">Estado</label>
-        <select id="st-${esc(o.code)}" data-order="${esc(o.code)}" class="mini-select">${statuses.map(x => `<option ${x === o.status ? 'selected' : ''}>${x}</option>`).join('')}</select></div></div>`).join('')
+        <select id="st-${esc(o.code)}" data-order="${esc(o.code)}" class="mini-select">${statuses.map(x => `<option value="${x}" ${x === o.status ? 'selected' : ''}>${STATUS_LABEL[x] || x}</option>`).join('')}</select>
+        ${o.status === 'pendiente_pago' ? `<button class="btn small gold" data-paid="${esc(o.code)}">Confirmar pago</button>` : ''}</div></div>`).join('')
       : '<p class="muted">Todavía no hay pedidos.</p>';
   } else if (tab === 'productos') {
     const { products } = await api('/admin/products');
@@ -207,16 +209,34 @@ export default async function admin({ query }) {
       ${editor('alianzas', { endpoint: '/admin/alliances', fields: ALLY_FIELDS, items: alliances, newLabel: 'Nueva marca, proveedor o alianza',
         title: a => esc(a.name), meta: a => `${esc(a.category)}${a.active ? '' : ' · oculto'}` })}`;
   } else if (tab === 'socios') {
-    const { members } = await api('/admin/members');
-    body = `<div class="table-wrap"><table><thead><tr><th>N°</th><th>Nombre</th><th>Email</th><th>Estado</th><th>Vence</th></tr></thead><tbody>
+    const [{ members }, { payments: pend }] = await Promise.all([api('/admin/members'), api('/admin/membership-payments')]);
+    body = `${pend.length ? `<h3 class="admin-h" style="margin-top:0">Pagos de membresía por confirmar</h3>
+      <div class="table-wrap" style="margin-bottom:28px"><table><thead><tr><th>Fecha</th><th>Socio</th><th>Medio</th><th class="num">Monto</th><th></th></tr></thead><tbody>
+      ${pend.map(p => `<tr><td>${dateFmt(p.createdAt)}</td><td>${esc(p.name)}<div class="muted" style="font-size:12px">${esc(p.email)} · Ref. CLUB-${p.id}</div></td><td>${esc(p.method)}</td><td class="num">${money(p.amount)}</td>
+        <td><button class="btn small gold" data-mp-confirm="${p.id}">Confirmar pago</button> <button class="link" data-mp-reject="${p.id}">Rechazar</button></td></tr>`).join('')}
+      </tbody></table></div>` : ''}
+    <div class="table-wrap"><table><thead><tr><th>N°</th><th>Nombre</th><th>Email</th><th>Estado</th><th>Vence</th></tr></thead><tbody>
       ${members.map(m => `<tr><td>${esc(m.number)}</td><td>${esc(m.name)}</td><td>${esc(m.email)}</td><td><span class="status ${m.status === 'active' ? 'activa' : 'vencida'}">${m.status === 'active' ? (m.cancelAtEnd ? 'cancela al vencer' : 'activa') : esc(m.status)}</span></td><td>${dateFmt(m.periodEnd)}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">Sin socios todavía.</td></tr>'}
     </tbody></table></div>`;
   } else {
-    const { settings, labels } = await api('/admin/settings');
-    body = `<form class="form panel" id="settings" style="max-width:560px">
-      ${Object.keys(settings).map(k => field({ name: k, label: labels[k] + (k === 'max_reserva' ? ' (unidades por pedido)' : ' ($)'), type: 'number', min: 0 }, settings[k], 'set')).join('')}
-      <p class="muted" style="font-size:13px;margin:0">La nueva cuota del Club se cobra a los socios nuevos y en la próxima renovación de los actuales.</p>
-      <button class="btn gold" type="submit">Guardar ajustes</button></form>`;
+    const { settings, labels, text, textLabels, payments } = await api('/admin/settings');
+    const unit = k => k === 'max_reserva' ? ' (unidades por pedido)' : k.startsWith('transfer_') ? '' : ' ($)';
+    body = `<form class="form" id="settings">
+      <div class="grid-2" style="align-items:start">
+        <div class="panel form"><h3>Precios y envíos</h3>
+          ${['membership_price', 'shipping_flat', 'free_shipping_from', 'max_reserva'].map(k => field({ name: k, label: labels[k] + unit(k), type: 'number', min: 0 }, settings[k], 'set')).join('')}
+          <p class="muted" style="font-size:13px;margin:0">La nueva cuota del Club se cobra en los próximos pagos.</p>
+        </div>
+        <div class="panel form"><h3>Medios de pago</h3>
+          <p class="${payments.mercadopago ? 'ok-msg' : 'error-msg'}" style="margin:0">${payments.mercadopago ? 'Mercado Pago conectado: tarjetas de crédito, débito, dinero en cuenta y cuotas.' : 'Mercado Pago sin conectar. Se activa cargando la credencial MP_ACCESS_TOKEN en el servidor (ver README).'}</p>
+          ${payments.test ? '<p class="muted" style="font-size:13px;margin:0">Modo desarrollo: también se ofrece «Pago de prueba». No aparece en la tienda publicada.</p>' : ''}
+          <h3 style="margin-top:8px">Transferencia bancaria</h3>
+          <p class="muted" style="font-size:13px;margin:0">Con alias o CBU cargado, la transferencia aparece en el checkout.</p>
+          ${Object.keys(textLabels).map(k => field({ name: 'text.' + k, label: textLabels[k] }, text[k], 'set')).join('')}
+          ${['transfer_discount_pct', 'transfer_expiry_hours'].map(k => field({ name: k, label: labels[k], type: 'number', min: 0 }, settings[k], 'set')).join('')}
+        </div>
+      </div>
+      <button class="btn gold" type="submit" style="align-self:flex-start">Guardar ajustes</button></form>`;
   }
 
   return {
@@ -227,6 +247,7 @@ export default async function admin({ query }) {
         <div class="kpi"><b>${money(s.revenue)}</b><span>Ventas</span></div>
         <div class="kpi"><b>${s.orders}</b><span>Pedidos</span></div>
         <div class="kpi"><b>${s.pending}</b><span>A preparar</span></div>
+        <div class="kpi"><b>${s.awaitingPayment}</b><span>Esperando pago</span></div>
         <div class="kpi"><b>${s.members}</b><span>Socios activos</span></div>
         <div class="kpi"><b>${money(s.mrr)}</b><span>Ingreso mensual Club</span></div>
         <div class="kpi"><b>${s.users}</b><span>Clientes</span></div>
@@ -265,7 +286,8 @@ export default async function admin({ query }) {
       }));
       root.querySelector('#settings')?.addEventListener('submit', async e => {
         e.preventDefault();
-        const body = Object.fromEntries([...new FormData(e.target)].map(([k, v]) => [k, Number(v)]));
+        const body = { text: {} };
+        for (const [k, v] of new FormData(e.target)) { if (k.startsWith('text.')) body.text[k.slice(5)] = v; else body[k] = Number(v); }
         try { await api('/admin/settings', { method: 'PATCH', body }); toast('Ajustes guardados'); }
         catch (ex) { toast(ex.message, 'error'); }
       });
@@ -277,6 +299,15 @@ export default async function admin({ query }) {
           toast('Edición creada con sus códigos'); go('admin?tab=ediciones&ed=' + id);
         } catch (ex) { toast(ex.message, 'error'); btn.disabled = false; btn.textContent = 'Generar códigos'; }
       });
+      root.querySelectorAll('[data-paid]').forEach(b => b.addEventListener('click', async () => {
+        try { await api('/admin/orders/' + b.dataset.paid, { method: 'PATCH', body: { status: 'pagado' } }); toast('Pago confirmado'); reload(); }
+        catch (ex) { toast(ex.message, 'error'); }
+      }));
+      root.querySelectorAll('[data-mp-confirm],[data-mp-reject]').forEach(b => b.addEventListener('click', async () => {
+        const ok = !!b.dataset.mpConfirm, id = b.dataset.mpConfirm || b.dataset.mpReject;
+        try { await api(`/admin/membership-payments/${id}/${ok ? 'confirm' : 'reject'}`, { method: 'POST' }); toast(ok ? 'Membresía activada' : 'Pago rechazado'); reload(); }
+        catch (ex) { toast(ex.message, 'error'); }
+      }));
       mountEditors(root);
     },
   };
