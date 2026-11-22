@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Komatsu" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/komatsuBlack</item>
+        <item name="android:statusBarColor">@color/komatsuBlack</item>
+        <item name="android:navigationBarColor">@color/komatsuBlack</item>
+        <item name="android:colorAccent">@color/komatsuGold</item>
+    </style>
+</resources>

@@ -1,0 +1,54 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Dominio de la tienda y versión: vienen de gradle.properties o de la línea de comandos (-P...).
+def host = (project.findProperty('komatsuHost') ?: 'sake-komatsu.onrender.com').toString().replaceAll('^https?://', '').replaceAll('/.*$', '')
+def launchUrl = "https://${host}/?source=android"
+
+android {
+    namespace 'com.bodegakomatsu.app'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.bodegakomatsu.app'
+        minSdk 23
+        targetSdk 36
+        versionCode Integer.parseInt(project.findProperty('komatsuVersionCode') ?: '1')
+        versionName project.findProperty('komatsuVersionName') ?: '1.0.0'
+
+        manifestPlaceholders = [hostName: host, launchUrl: launchUrl]
+        resValue 'string', 'launchUrl', launchUrl
+        resValue 'string', 'assetStatements', """[{ "relation": ["delegate_permission/common.handle_all_urls"], "target": { "namespace": "web", "site": "https://${host}" } }]"""
+    }
+
+    // Firma para Play Store: se activa si están las variables del almacén de llaves (ver android/README.md).
+    signingConfigs {
+        release {
+            def ks = System.getenv('KOMATSU_KEYSTORE_FILE')
+            if (ks) {
+                storeFile file(ks)
+                storePassword System.getenv('KOMATSU_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('KOMATSU_KEY_ALIAS') ?: 'komatsu'
+                keyPassword System.getenv('KOMATSU_KEY_PASSWORD') ?: System.getenv('KOMATSU_KEYSTORE_PASSWORD')
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (System.getenv('KOMATSU_KEYSTORE_FILE')) signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    buildFeatures { resValues true }
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+}

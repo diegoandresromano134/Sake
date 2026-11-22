@@ -104,6 +104,8 @@ function ageGate() {
 }
 
 window.addEventListener('hashchange', render);
+// App instalable (Android / iPhone): registra el service worker.
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('/sw.js').catch(() => {});
 (async () => {
   ageGate();
   paintHeader();

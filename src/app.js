@@ -42,6 +42,15 @@ export function createApp(db, { uploadsDir } = {}) {
   app.get('/api/health', (req, res) => res.json({ ok: true }));
   app.use('/api', (req, res, next) => next(new HttpError(404, 'Ruta no encontrada.')));
 
+  // Verificación de la app de Android: vincula el dominio con la huella SHA-256 de la firma de la app.
+  app.get('/.well-known/assetlinks.json', (req, res) => {
+    const fingerprints = (process.env.ANDROID_SHA256 || '').split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+    res.json(fingerprints.length ? [{
+      relation: ['delegate_permission/common.handle_all_urls'],
+      target: { namespace: 'android_app', package_name: process.env.ANDROID_PACKAGE || 'com.bodegakomatsu.app', sha256_cert_fingerprints: fingerprints },
+    }] : []);
+  });
+  app.get('/sw.js', (req, res, next) => { res.set('Cache-Control', 'no-cache'); next(); });
   if (uploadsDir) app.use('/uploads', express.static(uploadsDir, { maxAge: '7d', fallthrough: false }));
   app.use(express.static(PUBLIC, { maxAge: '1h', index: 'index.html' }));
   // SPA: cualquier otra ruta devuelve la app

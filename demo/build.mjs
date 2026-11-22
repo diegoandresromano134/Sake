@@ -33,6 +33,7 @@ patch(path.join(tmp, 'app.js'), [
    "document.addEventListener('click', e => { const a = e.target.closest('a[href^=\"#/\"]'); if (!a || e.defaultPrevented) return; e.preventDefault(); go(a.getAttribute('href').slice(2)); });"],
   ["const h = location.hash || '#/';", "const h = '#/' + route;"],
   ["import legalView from './views/legal.js';", "import legalView from './views/legal.js';\nimport './demo-bar.js';"],
+  ["if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('/sw.js').catch(() => {});", ''],
 ]);
 
 const result = await build({ entryPoints: [path.join(tmp, 'app.js')], bundle: true, format: 'iife', minify: true, write: false, target: 'es2020' });

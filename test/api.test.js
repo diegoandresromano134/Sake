@@ -197,6 +197,17 @@ test('admin edita degustaciones, anuncios, alianzas, fichas y ajustes', async ()
   assert.equal((await client()('PATCH', '/admin/settings', { membership_price: 1 })).status, 403);
 });
 
+test('app instalable: manifest y assetlinks', async () => {
+  const root = base.replace('/api', '');
+  const m = await (await fetch(root + '/manifest.webmanifest')).json();
+  assert.equal(m.name, 'Bodega Komatsu');
+  process.env.ANDROID_SHA256 = 'aa:bb';
+  const al = await (await fetch(root + '/.well-known/assetlinks.json')).json();
+  assert.equal(al[0].target.package_name, 'com.bodegakomatsu.app');
+  assert.deepEqual(al[0].target.sha256_cert_fingerprints, ['AA:BB']);
+  delete process.env.ANDROID_SHA256;
+});
+
 test('escrituras sin JSON se rechazan (CSRF)', async () => {
   const res = await fetch(base + '/auth/login', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'email=a&password=b' });
   assert.equal(res.status, 415);
