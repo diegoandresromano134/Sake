@@ -31,12 +31,12 @@ async function hash(pw) {
 }
 
 const PRODUCTS = [
-  ['komatsu-frutado-720', 'Komatsu Junmai Frutado', '小松 純米 果実香', 'frutado', 'botella', 720, 'Perfil aromático, fresco y floral — como un blanco frutado.', 'Nuestro Junmai insignia. Arroz orgánico Koshihikari pulido, koji de arroz y levaduras seleccionadas, fermentado lentamente en frío en tanques cilindrocónicos de acero inoxidable con control térmico.', 'Pera, melón blanco y flor de azahar. Boca sedosa, final limpio y levemente mineral.', 'Sashimi, ceviche, quesos frescos, cocina nikkei.', 15.5, 28000, 23800, 120, 'gold', 0],
-  ['komatsu-cereza-720', 'Komatsu Junmai Cereza', '小松 純米 桜桃', 'cereza', 'botella', 720, 'Junmai con cereza: delicado, rosado y de final largo.', 'Una base Junmai frutada que reposa con cerezas seleccionadas. Mantiene la pureza del arroz con un perfil frutal rojo, elegante y equilibrado.', 'Cereza fresca, frutos rojos y un toque de almendra. Dulzor sutil, acidez viva.', 'Pato, cerdo laqueado, postres con frutos rojos, chocolate amargo.', 14.5, 30000, 25500, 90, 'red', 0],
-  ['komatsu-pack-duo-720', 'Pack Dúo Komatsu', '小松 二本セット', 'duo', 'pack', 1440, 'Frutado + Cereza en estuche de regalo.', 'Las dos expresiones de la cosecha en un estuche negro con hot stamping dorado. Ideal para regalar o para comparar en una cata en casa.', 'Incluye 1 × Junmai Frutado 720 ml y 1 × Junmai Cereza 720 ml.', 'Una mesa completa: de entradas frías a postre.', 15.0, 54000, 45000, 45, 'gold', 0],
+  ['komatsu-frutado-700', 'Komatsu Junmai Frutado', '小松 純米 果実香', 'frutado', 'botella', 700, 'Perfil aromático, fresco y floral — como un blanco frutado.', 'Nuestro Junmai insignia. Arroz orgánico Koshihikari pulido, koji de arroz y levaduras seleccionadas, fermentado lentamente en frío en tanques cilindrocónicos de acero inoxidable con control térmico.', 'Pera, melón blanco y flor de azahar. Boca sedosa, final limpio y levemente mineral.', 'Sashimi, ceviche, quesos frescos, cocina nikkei.', 15.5, 28000, 23800, 120, 'gold', 0],
+  ['komatsu-cereza-700', 'Komatsu Junmai Cereza', '小松 純米 桜桃', 'cereza', 'botella', 700, 'Partida limitada: junmai con cereza, delicado, rosado y de final largo.', 'Una base Junmai frutada que reposa con cerezas seleccionadas. Mantiene la pureza del arroz con un perfil frutal rojo, elegante y equilibrado.', 'Cereza fresca, frutos rojos y un toque de almendra. Dulzor sutil, acidez viva.', 'Pato, cerdo laqueado, postres con frutos rojos, chocolate amargo.', 14.5, 30000, 25500, 90, 'red', 0],
+  ['komatsu-pack-duo-700', 'Pack Dúo Komatsu', '小松 二本セット', 'duo', 'pack', 1400, 'Frutado + Cereza en estuche de regalo.', 'Las dos expresiones de la cosecha en un estuche negro con hot stamping dorado. Ideal para regalar o para comparar en una cata en casa.', 'Incluye 1 × Junmai Frutado 700 ml y 1 × Junmai Cereza 700 ml.', 'Una mesa completa: de entradas frías a postre.', 15.0, 54000, 45000, 45, 'gold', 0],
   ['komatsu-tokkuri-frutado-330', 'Tokkuri Frutado', '徳利 果実香', 'frutado', 'tokkuri', 330, 'Formato jarrita vertedora, pensado para la mesa del restaurante.', 'El Junmai Frutado en tokkuri de 330 ml: se sirve directo en la mesa, en ochoko, frío o a temperatura ambiente.', 'Pera, melón blanco y flor de azahar.', 'Barra de sushi, izakaya, omakase.', 15.5, 15000, 12750, 200, 'gold', 0],
   ['komatsu-tokkuri-cereza-330', 'Tokkuri Cereza', '徳利 桜桃', 'cereza', 'tokkuri', 330, 'La versión cereza en jarrita de servicio.', 'El Junmai Cereza en tokkuri de 330 ml, para compartir en la mesa.', 'Cereza fresca y frutos rojos.', 'Robata, yakitori, postres.', 14.5, 16000, 13600, 150, 'red', 0],
-  ['komatsu-reserva-shokunin-720', 'Reserva Shokunin', '職人 限定', 'reserva', 'botella', 720, 'Tirada limitada y numerada. Exclusiva Club Member.', 'Selección del maestro: un único tanque de la cosecha, embotellado a mano y numerado. Sólo para socios del Club Komatsu.', 'Arroz cocido, nuez fresca, durazno blanco. Textura profunda y final muy largo.', 'Wagyu, hongos, quesos maduros.', 16.0, 52000, 52000, 60, 'red', 1],
+  ['komatsu-reserva-shokunin-700', 'Reserva Shokunin', '職人 限定', 'reserva', 'botella', 700, 'Tirada limitada y numerada. Exclusiva Club Member.', 'Selección del maestro: un único tanque de la cosecha, embotellado a mano y numerado. Sólo para socios del Club Komatsu.', 'Arroz cocido, nuez fresca, durazno blanco. Textura profunda y final muy largo.', 'Wagyu, hongos, quesos maduros.', 16.0, 52000, 52000, 60, 'red', 1],
 ];
 
 async function seed() {
@@ -54,6 +54,7 @@ async function seed() {
       stock: p[13], accent: p[14], members_only: p[15], active: 1, sort: i + 1, ingredients: null,
       presale_until: p[3] === 'cereza' && p[4] === 'botella' ? iso(t + 14 * DAY) : null,
       image: p[4] === 'tokkuri' ? 'tokkuri' : 'botella',
+      photo: { 'komatsu-frutado-700': '/img/prod-frutado.jpg', 'komatsu-cereza-700': '/img/prod-cereza.jpg', 'komatsu-pack-duo-700': '/img/prod-duo.jpg', 'komatsu-reserva-shokunin-700': '/img/prod-reserva.jpg' }[p[0]] || null,
     })),
     memberships: [{ user_id: 2, status: 'active', monthly_price: MEMBERSHIP, started_at: iso(t - 35 * DAY), current_period_end: iso(t + 25 * DAY), cancel_at_period_end: 0, member_number: 'KM-00002' }],
     payments: [
@@ -64,7 +65,7 @@ async function seed() {
       id: 1, code: 'KMT-DEMO-0001', user_id: 2, status: 'entregado', channel: 'member', subtotal: 49300, savings: 8700, shipping: 0, total: 49300,
       delivery: 'envio', ship: { name: 'Kenji Romano', phone: '1155550000', address: 'Sarmiento 820', city: 'Morón', province: 'Buenos Aires', zip: '1708' },
       notes: null, created_at: iso(t - 20 * DAY),
-      items: [{ product_id: 1, name: 'Komatsu Junmai Frutado 720 ml · 2026', unitPrice: 23800, qty: 1 }, { product_id: 2, name: 'Komatsu Junmai Cereza 720 ml · 2026', unitPrice: 25500, qty: 1 }],
+      items: [{ product_id: 1, name: 'Komatsu Junmai Frutado 700 ml · 2026', unitPrice: 23800, qty: 1 }, { product_id: 2, name: 'Komatsu Junmai Cereza 700 ml · 2026', unitPrice: 25500, qty: 1 }],
     }],
     announcements: [
       { id: 3, kind: 'anuncio', title: 'Reserva Shokunin: quedan pocas botellas', titleJp: '職人 限定', body: 'La tirada numerada de la Reserva Shokunin es sólo para socios. Cada socio puede reservar hasta 2 botellas.', public: 0, createdAt: iso(t - 1 * DAY) },
@@ -109,7 +110,7 @@ let DB = null;
 async function load() {
   if (DB) return DB;
   try { DB = JSON.parse(localStorage.getItem(KEY)); } catch { DB = null; }
-  if (!DB || !DB.products || !DB.alliances || !DB.editions) { DB = await seed(); save(); }
+  if (!DB || !DB.products || !DB.alliances || !DB.editions || DB.products[0]?.volume_ml !== 700) { DB = await seed(); save(); }
   return DB;
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch { /* sin storage: queda en memoria */ } }
@@ -402,7 +403,7 @@ const routes = [
   }],
   ['POST', /^\/admin\/products$/, (b) => {
     needAdmin();
-    const n = productFields({ variety: 'frutado', format: 'botella', volume_ml: 720, vintage: new Date().getFullYear(), tagline: '', description: '',
+    const n = productFields({ variety: 'frutado', format: 'botella', volume_ml: 700, vintage: new Date().getFullYear(), tagline: '', description: '',
       tasting_notes: '', pairing: '', abv: 15, stock: 0, accent: 'gold', active: false, members_only: false, sort: 50, name_jp: '', ...b });
     if (!n.name) err(400, 'Falta el nombre.');
     if (n.price == null || n.member_price == null) err(400, 'Faltan los precios.');

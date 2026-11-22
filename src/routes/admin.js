@@ -84,7 +84,7 @@ export default function adminRoutes(db, { uploadsDir } = {}) {
   });
 
   r.post('/products', (req, res) => {
-    const n = productFields({ variety: 'frutado', format: 'botella', volume_ml: 720, vintage: new Date().getFullYear(), tagline: '', description: '',
+    const n = productFields({ variety: 'frutado', format: 'botella', volume_ml: 700, vintage: new Date().getFullYear(), tagline: '', description: '',
       tasting_notes: '', pairing: '', abv: 15, stock: 0, accent: 'gold', active: 0, members_only: 0, sort: 50, name_jp: '', ...req.body });
     if (!n.name) throw new HttpError(400, 'Falta el nombre.');
     if (n.price == null || n.member_price == null) throw new HttpError(400, 'Faltan los precios.');

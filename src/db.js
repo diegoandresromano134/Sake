@@ -181,8 +181,8 @@ const VINTAGE = 2026;
 
 const PRODUCTS = [
   {
-    slug: 'komatsu-frutado-720', name: 'Komatsu Junmai Frutado', name_jp: '小松 純米 果実香',
-    variety: 'frutado', format: 'botella', volume_ml: 720,
+    slug: 'komatsu-frutado-700', name: 'Komatsu Junmai Frutado', name_jp: '小松 純米 果実香',
+    variety: 'frutado', format: 'botella', volume_ml: 700,
     tagline: 'Perfil aromático, fresco y floral — como un blanco frutado.',
     description: 'Nuestro Junmai insignia. Arroz orgánico Koshihikari pulido, koji de arroz y levaduras seleccionadas, fermentado lentamente en frío en tanques cilindrocónicos de acero inoxidable con control térmico.',
     tasting_notes: 'Pera, melón blanco y flor de azahar. Boca sedosa, final limpio y levemente mineral.',
@@ -190,20 +190,20 @@ const PRODUCTS = [
     abv: 15.5, price: 28000, member_price: 23800, stock: 120, accent: 'gold', sort: 1,
   },
   {
-    slug: 'komatsu-cereza-720', name: 'Komatsu Junmai Cereza', name_jp: '小松 純米 桜桃',
-    variety: 'cereza', format: 'botella', volume_ml: 720,
-    tagline: 'Junmai con cereza: delicado, rosado y de final largo.',
-    description: 'Una base Junmai frutada que reposa con cerezas seleccionadas. Mantiene la pureza del arroz con un perfil frutal rojo, elegante y equilibrado.',
+    slug: 'komatsu-cereza-700', name: 'Komatsu Junmai Cereza', name_jp: '小松 純米 桜桃',
+    variety: 'cereza', format: 'botella', volume_ml: 700,
+    tagline: 'Partida limitada: junmai con cereza, delicado, rosado y de final largo.',
+    description: 'Partida limitada y numerada. Una base Junmai frutada que reposa con cerezas seleccionadas. Mantiene la pureza del arroz con un perfil frutal rojo, elegante y equilibrado.',
     tasting_notes: 'Cereza fresca, frutos rojos y un toque de almendra. Dulzor sutil, acidez viva.',
     pairing: 'Pato, cerdo laqueado, postres con frutos rojos, chocolate amargo.',
     abv: 14.5, price: 30000, member_price: 25500, stock: 90, accent: 'red', sort: 2,
   },
   {
-    slug: 'komatsu-pack-duo-720', name: 'Pack Dúo Komatsu', name_jp: '小松 二本セット',
-    variety: 'duo', format: 'pack', volume_ml: 1440,
+    slug: 'komatsu-pack-duo-700', name: 'Pack Dúo Komatsu', name_jp: '小松 二本セット',
+    variety: 'duo', format: 'pack', volume_ml: 1400,
     tagline: 'Frutado + Cereza en estuche de regalo.',
     description: 'Las dos expresiones de la cosecha en un estuche negro con hot stamping dorado. Ideal para regalar o para comparar en una cata en casa.',
-    tasting_notes: 'Incluye 1 × Junmai Frutado 720 ml y 1 × Junmai Cereza 720 ml.',
+    tasting_notes: 'Incluye 1 × Junmai Frutado 700 ml y 1 × Junmai Cereza 700 ml.',
     pairing: 'Una mesa completa: de entradas frías a postre.',
     abv: 15.0, price: 54000, member_price: 45000, stock: 45, accent: 'gold', sort: 3,
   },
@@ -226,8 +226,8 @@ const PRODUCTS = [
     abv: 14.5, price: 16000, member_price: 13600, stock: 150, accent: 'red', sort: 5,
   },
   {
-    slug: 'komatsu-reserva-shokunin-720', name: 'Reserva Shokunin', name_jp: '職人 限定',
-    variety: 'reserva', format: 'botella', volume_ml: 720,
+    slug: 'komatsu-reserva-shokunin-700', name: 'Reserva Shokunin', name_jp: '職人 限定',
+    variety: 'reserva', format: 'botella', volume_ml: 700,
     tagline: 'Tirada limitada y numerada. Exclusiva Club Member.',
     description: 'Selección del maestro: un único tanque de la cosecha, embotellado a mano y numerado. Sólo para socios del Club Komatsu.',
     tasting_notes: 'Arroz cocido, nuez fresca, durazno blanco. Textura profunda y final muy largo.',
@@ -236,6 +236,11 @@ const PRODUCTS = [
     members_only: 1,
   },
 ];
+
+const PRODUCT_PHOTOS = {
+  'komatsu-frutado-700': '/img/prod-frutado.jpg', 'komatsu-cereza-700': '/img/prod-cereza.jpg',
+  'komatsu-pack-duo-700': '/img/prod-duo.jpg', 'komatsu-reserva-shokunin-700': '/img/prod-reserva.jpg',
+};
 
 export function openDb(file) {
   if (file !== ':memory:') fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -283,6 +288,9 @@ function seed(db) {
         p.variety === 'cereza' && p.format === 'botella' ? presale : null,
         p.format === 'tokkuri' ? 'tokkuri' : 'botella', p.accent, p.sort);
     }
+    // Fotos de la botella Barrica 700 (se cambian desde el panel)
+    const ph = db.prepare('UPDATE products SET photo=? WHERE slug=?');
+    for (const [slug, f] of Object.entries(PRODUCT_PHOTOS)) ph.run(f, slug);
   }
 
   if (db.prepare('SELECT COUNT(*) AS n FROM announcements').get().n === 0) {

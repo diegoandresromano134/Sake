@@ -63,7 +63,7 @@ sake/
 |---|---|
 | `#/` | Home: hero, pilares, sakes destacados, novedades, historia |
 | `#/bodega` (+ `/historia`, `/filosofia`, `/materias-primas`, `/recorrido`, `/alianzas`) | La Bodega, con recorrido panorámico arrastrable con puntos de interés |
-| `#/shop` | Shop Público con filtros (720 ml, Tokkuri 330 ml, Pack dúo) |
+| `#/shop` | Shop Público con filtros (700 ml, Tokkuri 330 ml, Pack dúo) |
 | `#/producto/:slug` | Ficha: notas de cata, maridaje, sin TACC, precio público y de socio |
 | `#/club` | Beneficios y alta de socio ($20.000/mes) |
 | `#/club/shop` | Member Shop (sólo socios): precios de socio, preventas, Reserva Shokunin |

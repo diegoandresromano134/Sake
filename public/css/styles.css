@@ -412,3 +412,7 @@ dialog.age-gate::backdrop { background: rgba(0,0,0,.92); }
 @media (prefers-reduced-motion: reduce) { .wa-float { animation: none; } }
 .drawer:not([hidden]) ~ .wa-float { display: none; }
 @media (max-width: 420px) { .brand-lat { display: none; } .brand-jp { font-size: 26px; } }
+
+/* Fotos de producto sobre fondo de estudio: la ficha muestra la botella entera */
+.pdp-art:has(> .product-photo) { background: #E4DED3; }
+.pdp-art .product-photo { object-fit: contain; }

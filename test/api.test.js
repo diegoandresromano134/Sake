@@ -38,7 +38,7 @@ test('catálogo público oculta exclusivos y muestra precio regular', async () =
   assert.equal(body.member, false);
   assert.ok(body.products.length >= 5);
   assert.ok(body.products.every(p => !p.membersOnly));
-  const f = body.products.find(p => p.slug === 'komatsu-frutado-720');
+  const f = body.products.find(p => p.slug === 'komatsu-frutado-700');
   assert.equal(f.finalPrice, f.price);
 });
 
@@ -67,22 +67,22 @@ test('no socio: no puede comprar exclusivos ni preventa; compra pública con env
   const c = client();
   await c('POST', '/auth/register', { name: 'Beto', email: 'beto@x.com', password: '12345678', birthdate: adult });
   assert.equal((await c('GET', '/club/feed')).status, 403);
-  let q = (await c('POST', '/cart/quote', { items: [{ slug: 'komatsu-reserva-shokunin-720', qty: 1 }, { slug: 'komatsu-cereza-720', qty: 1 }] })).body;
+  let q = (await c('POST', '/cart/quote', { items: [{ slug: 'komatsu-reserva-shokunin-700', qty: 1 }, { slug: 'komatsu-cereza-700', qty: 1 }] })).body;
   assert.equal(q.issues.length, 2);
-  q = (await c('POST', '/cart/quote', { items: [{ slug: 'komatsu-frutado-720', qty: 1 }] })).body;
+  q = (await c('POST', '/cart/quote', { items: [{ slug: 'komatsu-frutado-700', qty: 1 }] })).body;
   assert.equal(q.subtotal, 28000);
   assert.equal(q.shipping, 5000);
-  const before = db.prepare(`SELECT stock FROM products WHERE slug='komatsu-frutado-720'`).get().stock;
-  const r = await c('POST', '/orders', { items: [{ slug: 'komatsu-frutado-720', qty: 2 }], delivery: 'envio', paymentMethod: 'prueba', ...ship });
+  const before = db.prepare(`SELECT stock FROM products WHERE slug='komatsu-frutado-700'`).get().stock;
+  const r = await c('POST', '/orders', { items: [{ slug: 'komatsu-frutado-700', qty: 2 }], delivery: 'envio', paymentMethod: 'prueba', ...ship });
   assert.equal(r.status, 201);
   assert.equal(r.body.order.total, 56000 + 5000);
   assert.equal(r.body.order.channel, 'publico');
-  assert.equal(db.prepare(`SELECT stock FROM products WHERE slug='komatsu-frutado-720'`).get().stock, before - 2);
+  assert.equal(db.prepare(`SELECT stock FROM products WHERE slug='komatsu-frutado-700'`).get().stock, before - 2);
   assert.equal((await c('GET', '/orders')).body.orders.length, 1);
 });
 
 test('checkout requiere sesión', async () => {
-  const r = await client()('POST', '/orders', { items: [{ slug: 'komatsu-frutado-720', qty: 1 }], delivery: 'retiro', paymentMethod: 'prueba', ...ship });
+  const r = await client()('POST', '/orders', { items: [{ slug: 'komatsu-frutado-700', qty: 1 }], delivery: 'retiro', paymentMethod: 'prueba', ...ship });
   assert.equal(r.status, 401);
 });
 
@@ -100,9 +100,9 @@ test('membresía: alta, precios de socio, exclusivos, club y baja', async () => 
   assert.ok(products.some(p => p.membersOnly));
   assert.ok(products.every(p => p.finalPrice === p.memberPrice));
 
-  let q = (await c('POST', '/cart/quote', { items: [{ slug: 'komatsu-reserva-shokunin-720', qty: 3 }] })).body;
+  let q = (await c('POST', '/cart/quote', { items: [{ slug: 'komatsu-reserva-shokunin-700', qty: 3 }] })).body;
   assert.equal(q.issues.length, 1, 'tope de 2 por socio');
-  const r = await c('POST', '/orders', { items: [{ slug: 'komatsu-cereza-720', qty: 1 }, { slug: 'komatsu-reserva-shokunin-720', qty: 2 }], delivery: 'envio', paymentMethod: 'prueba', ...ship });
+  const r = await c('POST', '/orders', { items: [{ slug: 'komatsu-cereza-700', qty: 1 }, { slug: 'komatsu-reserva-shokunin-700', qty: 2 }], delivery: 'envio', paymentMethod: 'prueba', ...ship });
   assert.equal(r.status, 201);
   assert.equal(r.body.order.shipping, 0);
   assert.equal(r.body.order.subtotal, 25500 + 104000);
@@ -131,7 +131,7 @@ test('admin: resumen y cambio de estado con devolución de stock', async () => {
   assert.equal(sum.orders, 2);
   const { orders } = (await c('GET', '/admin/orders')).body;
   const o = orders.find(x => x.channel === 'publico');
-  const stock = () => db.prepare(`SELECT stock FROM products WHERE slug='komatsu-frutado-720'`).get().stock;
+  const stock = () => db.prepare(`SELECT stock FROM products WHERE slug='komatsu-frutado-700'`).get().stock;
   const s0 = stock();
   assert.equal((await c('PATCH', `/admin/orders/${o.code}`, { status: 'cancelado' })).status, 200);
   assert.equal(stock(), s0 + 2);
@@ -184,7 +184,7 @@ test('admin edita degustaciones, anuncios, alianzas, fichas y ajustes', async ()
   await c('DELETE', `/admin/alliances/${al.id}`);
   // Ficha de producto y producto nuevo
   await c('PATCH', '/admin/products/1', { tagline: 'Bajada nueva', tasting_notes: 'Notas nuevas', ingredients: 'Agua, arroz, koji' });
-  const p1 = (await client()('GET', '/products/komatsu-frutado-720')).body.product;
+  const p1 = (await client()('GET', '/products/komatsu-frutado-700')).body.product;
   assert.equal(p1.tagline, 'Bajada nueva'); assert.equal(p1.ingredients, 'Agua, arroz, koji');
   const np = await c('POST', '/admin/products', { name: 'Komatsu Yuzu', variety: 'yuzu', price: 31000, member_price: 26000, stock: 10, active: true });
   assert.equal(np.status, 201);
@@ -303,7 +303,7 @@ test('Mercado Pago: genera el link de pago y acredita con la notificación', asy
     const methods = (await c('GET', '/payment-methods')).body.methods.map(m => m.id);
     assert.ok(methods.includes('mercadopago'));
     assert.ok(!methods.includes('prueba'), 'con Mercado Pago activo no se ofrece el pago de prueba');
-    const r = await c('POST', '/orders', { items: [{ slug: 'komatsu-frutado-720', qty: 1 }], delivery: 'envio', paymentMethod: 'mercadopago', ...ship });
+    const r = await c('POST', '/orders', { items: [{ slug: 'komatsu-frutado-700', qty: 1 }], delivery: 'envio', paymentMethod: 'mercadopago', ...ship });
     assert.equal(r.status, 201);
     assert.match(r.body.checkoutUrl, /mercadopago/);
     const code = r.body.order.code;

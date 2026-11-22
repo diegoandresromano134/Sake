@@ -4,7 +4,7 @@ import { state, isMember, isAdmin, addToCart } from '../store.js';
 import { productCard } from './home.js';
 import { needLogin, go } from '../app.js';
 
-const FILTERS = [['', 'Todo'], ['botella', 'Botellas 720 ml'], ['tokkuri', 'Tokkuri 330 ml'], ['pack', 'Pack dúo']];
+const FILTERS = [['', 'Todo'], ['botella', 'Botellas 700 ml'], ['tokkuri', 'Tokkuri 330 ml'], ['pack', 'Pack dúo']];
 
 function grid(products, member, base, formato) {
   const list = formato ? products.filter(p => p.format === formato) : products;

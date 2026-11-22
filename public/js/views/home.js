@@ -31,7 +31,7 @@ export default async function home() {
             <a class="btn" href="#/club">Club Member · 会員</a>
           </div>
         </div>
-        <div class="hero-art"><img src="/img/botella-720.jpg" alt="Botella de Sake Komatsu Junmai, negro mate con etiqueta dorada" width="1312" height="865"></div>
+        <div class="hero-art"><img src="/img/hero-barrica.jpg" alt="Komatsu Junmai Frutado en botella transparente con etiqueta negra y dorada, junto a la partida limitada de Cereza" width="1400" height="875"></div>
       </div>
     </section>
     ${state.user ? '' : `<section class="account-band"><div class="container account-band-inner">
