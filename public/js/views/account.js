@@ -4,8 +4,9 @@ import { state, refreshUser, isAdmin, clearCart } from '../store.js';
 import { needLogin, go } from '../app.js';
 import { orderDetail } from './cart.js';
 import { memberCard } from './club.js';
+import { certificateCard } from './certificate.js';
 
-const TABS = [['pedidos', 'Pedidos'], ['club', 'Membresía'], ['perfil', 'Perfil'], ['seguridad', 'Seguridad']];
+const TABS = [['pedidos', 'Pedidos'], ['botellas', 'Mis botellas'], ['club', 'Membresía'], ['perfil', 'Perfil'], ['seguridad', 'Seguridad']];
 const STATUS_LABEL = { activa: 'Activa', cancela_al_vencer: 'Se cancela al vencer', vencida: 'Vencida', pago_pendiente: 'Pago pendiente' };
 
 export default async function account({ query }) {
@@ -16,6 +17,11 @@ export default async function account({ query }) {
   if (tab === 'pedidos') {
     const { orders } = await api('/orders');
     body = orders.length ? orders.map(orderDetail).join('') : '<div class="empty"><span class="kanji">空</span><p class="muted">Todavía no hiciste pedidos.</p><a class="btn gold" href="#/shop">Ir al Shop</a></div>';
+  } else if (tab === 'botellas') {
+    const { certificates } = await api('/certificates/mine');
+    body = `<div class="row" style="justify-content:space-between;margin-bottom:20px"><p class="muted" style="margin:0">Tus botellas numeradas registradas: ${certificates.length}</p><a class="btn small gold" href="#/certificado">Registrar una botella</a></div>`
+      + (certificates.length ? `<div class="cert-list">${certificates.map(c => `<a href="#/certificado/${esc(c.code)}" style="text-decoration:none">${certificateCard(c, { compact: true })}</a>`).join('')}</div>`
+        : '<div class="empty"><span class="kanji">瓶</span><p class="muted">Cada botella Komatsu trae un código en la etiqueta. Registralo y queda a tu nombre, con su certificado de autenticidad.</p></div>');
   } else if (tab === 'club') {
     const { membership: m, payments } = await api('/membership');
     body = !m ? `<div class="panel gold"><h3>Todavía no sos socio</h3><p class="muted">Sumate al Club por ${money((await api('/settings')).membershipPrice)} por mes.</p><a class="btn gold" href="#/club">Conocer el Club</a></div>` : `

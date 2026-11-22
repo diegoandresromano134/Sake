@@ -134,6 +134,25 @@ CREATE TABLE IF NOT EXISTS event_rsvps (
   PRIMARY KEY (event_id, user_id)
 );
 
+CREATE TABLE IF NOT EXISTS editions (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  product_id INTEGER NOT NULL REFERENCES products(id),
+  vintage    INTEGER NOT NULL,
+  name       TEXT,
+  size       INTEGER NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS bottle_codes (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  edition_id    INTEGER NOT NULL REFERENCES editions(id) ON DELETE CASCADE,
+  number        INTEGER NOT NULL,
+  code          TEXT NOT NULL UNIQUE,
+  owner_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  claimed_at    TEXT,
+  UNIQUE (edition_id, number)
+);
+
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL

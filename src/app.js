@@ -7,6 +7,7 @@ import authRoutes from './routes/auth.js';
 import shopRoutes from './routes/shop.js';
 import clubRoutes from './routes/club.js';
 import adminRoutes from './routes/admin.js';
+import certificateRoutes from './routes/certificates.js';
 
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
@@ -38,6 +39,7 @@ export function createApp(db, { uploadsDir } = {}) {
   app.use('/api/auth', authRoutes(db));
   app.use('/api', shopRoutes(db));
   app.use('/api', clubRoutes(db));
+  app.use('/api', certificateRoutes(db));
   app.use('/api/admin', adminRoutes(db, { uploadsDir }));
   app.get('/api/health', (req, res) => res.json({ ok: true }));
   app.use('/api', (req, res, next) => next(new HttpError(404, 'Ruta no encontrada.')));

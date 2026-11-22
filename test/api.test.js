@@ -208,6 +208,40 @@ test('app instalable: manifest y assetlinks', async () => {
   delete process.env.ANDROID_SHA256;
 });
 
+test('botellas numeradas: edición, verificación y registro a nombre del dueño', async () => {
+  const admin = client();
+  await admin('POST', '/auth/login', { email: 'admin@komatsu.local', password: 'komatsu-admin' });
+  assert.equal((await client()('POST', '/admin/editions', { productId: 1, vintage: 2027, size: 5 })).status, 403);
+  const ed = await admin('POST', '/admin/editions', { productId: 1, vintage: 2027, size: 50, name: 'Primera nieve' });
+  assert.equal(ed.status, 201);
+  const codes = (await admin('GET', `/admin/editions/${ed.body.id}/codes`)).body.codes;
+  assert.equal(codes.length, 50);
+  assert.equal(new Set(codes.map(c => c.code)).size, 50);
+  const code = codes[6].code;
+  // Verificación pública (acepta minúsculas y sin guión)
+  const v = await client()('GET', '/certificates/' + code.toLowerCase().replace('-', ''));
+  assert.equal(v.status, 200);
+  assert.equal(v.body.certificate.number, 7);
+  assert.equal(v.body.certificate.size, 50);
+  assert.equal(v.body.certificate.claimed, false);
+  assert.equal((await client()('GET', '/certificates/XXXXX-XXXXX')).status, 404);
+  // Registro
+  const u1 = client(), u2 = client();
+  await u1('POST', '/auth/register', { name: 'Diego Tanaka', email: 'cert1@x.com', password: '12345678', birthdate: adult });
+  await u2('POST', '/auth/register', { name: 'Otra Persona', email: 'cert2@x.com', password: '12345678', birthdate: adult });
+  assert.equal((await client()('POST', `/certificates/${code}/claim`)).status, 401);
+  const c1 = await u1('POST', `/certificates/${code}/claim`);
+  assert.equal(c1.status, 200);
+  assert.equal(c1.body.certificate.mine, true);
+  assert.equal(c1.body.certificate.owner, 'Diego T.');
+  assert.equal((await u2('POST', `/certificates/${code}/claim`)).status, 409);
+  assert.equal((await u1('GET', '/certificates/mine')).body.certificates.length, 1);
+  const csv = await fetch(base + `/admin/editions/${ed.body.id}/codes.csv`, { headers: {} });
+  assert.equal(csv.status, 403);
+  const list = (await admin('GET', '/admin/editions')).body.editions[0];
+  assert.equal(list.claimed, 1);
+});
+
 test('escrituras sin JSON se rechazan (CSRF)', async () => {
   const res = await fetch(base + '/auth/login', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'email=a&password=b' });
   assert.equal(res.status, 415);

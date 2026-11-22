@@ -5,7 +5,7 @@ import { needLogin, go } from '../app.js';
 import { orderDetail } from './cart.js';
 
 const TABS = [
-  ['pedidos', 'Pedidos'], ['productos', 'Productos'], ['degustaciones', 'Degustaciones'], ['anuncios', 'Anuncios y premios'],
+  ['pedidos', 'Pedidos'], ['productos', 'Productos'], ['ediciones', 'Ediciones numeradas'], ['degustaciones', 'Degustaciones'], ['anuncios', 'Anuncios y premios'],
   ['alianzas', 'Marcas y alianzas'], ['socios', 'Socios'], ['ajustes', 'Ajustes'],
 ];
 const reload = () => window.dispatchEvent(new HashChangeEvent('hashchange'));
@@ -166,6 +166,29 @@ export default async function admin({ query }) {
       <p class="muted" style="margin-top:0">Nombre, textos, notas de cata, maridaje e ingredientes que se ven en la tienda. Para sacar un producto de la venta, destildá «Visible».</p>
       ${editor('productos', { endpoint: '/admin/products', fields: PRODUCT_FIELDS, newFields: NEW_PRODUCT_FIELDS, items: products, newLabel: 'Nuevo producto',
         canDelete: false, title: p => esc(p.name), meta: p => `${p.volume_ml} ml · ${p.vintage}${p.active ? '' : ' · oculto'}` })}`;
+  } else if (tab === 'ediciones') {
+    const [{ editions }, { products }] = await Promise.all([api('/admin/editions'), api('/admin/products')]);
+    const sel = editions.find(e => String(e.id) === query.ed);
+    const codes = sel ? (await api(`/admin/editions/${sel.id}/codes?limit=300`)).codes : [];
+    body = `<p class="muted" style="margin-top:0">Cada edición genera un código único por botella (Nº 1 a N). La imprenta lo pone en la etiqueta junto a un QR con el link del certificado; el comprador lo registra a su nombre en la web.</p>
+      <form class="form panel" id="new-edition" style="margin-bottom:28px">
+        <h3>Nueva edición numerada</h3>
+        <div class="editor-grid">
+          <div class="field"><label for="ed-prod">Producto</label><select id="ed-prod" name="productId">${products.map(p => `<option value="${p.id}">${esc(p.name)} · ${p.volume_ml} ml</option>`).join('')}</select></div>
+          <div class="field"><label for="ed-vin">Cosecha</label><input id="ed-vin" name="vintage" type="number" min="2000" value="${new Date().getFullYear()}"></div>
+          <div class="field"><label for="ed-size">Cantidad de botellas</label><input id="ed-size" name="size" type="number" min="1" max="20000" value="1000"></div>
+          <div class="field"><label for="ed-name">Nombre de la edición (opcional)</label><input id="ed-name" name="name" placeholder="Primera nieve"></div>
+        </div>
+        <button class="btn gold small" type="submit">Generar códigos</button>
+      </form>
+      ${editions.length ? `<div class="table-wrap"><table><thead><tr><th>Edición</th><th>Cosecha</th><th class="num">Botellas</th><th class="num">Registradas</th><th></th></tr></thead><tbody>
+        ${editions.map(e => `<tr><td>${esc(e.product)}${e.name ? `<div class="muted" style="font-size:12px">${esc(e.name)}</div>` : ''}</td><td>${e.vintage}</td><td class="num">${e.size}</td><td class="num">${e.claimed}</td>
+          <td><a class="btn small" href="#/admin?tab=ediciones&ed=${e.id}">Ver códigos</a> <a class="link" href="/api/admin/editions/${e.id}/codes.csv">Descargar CSV para imprenta</a></td></tr>`).join('')}
+      </tbody></table></div>` : '<p class="muted">Todavía no hay ediciones numeradas.</p>'}
+      ${sel ? `<h3 class="admin-h">Códigos · ${esc(sel.product)} ${sel.vintage}${sel.name ? ' · ' + esc(sel.name) : ''}</h3>
+        <div class="table-wrap"><table><thead><tr><th>Nº</th><th>Código</th><th>Propietario</th><th></th></tr></thead><tbody>
+        ${codes.map(c => `<tr><td>${c.number} / ${sel.size}</td><td class="mono">${esc(c.code)}</td><td>${c.owner ? esc(c.owner) : '<span class="muted">—</span>'}</td><td><a class="link" href="#/certificado/${esc(c.code)}">Ver certificado</a></td></tr>`).join('')}
+        </tbody></table></div>${sel.size > codes.length ? `<p class="muted" style="font-size:13px">Se muestran las primeras ${codes.length}. El CSV tiene todas.</p>` : ''}` : ''}`;
   } else if (tab === 'degustaciones') {
     const { events } = await api('/admin/events');
     body = `<p class="muted" style="margin-top:0">Las degustaciones visibles aparecen en el Área de socios para reservar lugar. Podés cambiar fecha, cupo y lugar en cualquier momento.</p>
@@ -245,6 +268,14 @@ export default async function admin({ query }) {
         const body = Object.fromEntries([...new FormData(e.target)].map(([k, v]) => [k, Number(v)]));
         try { await api('/admin/settings', { method: 'PATCH', body }); toast('Ajustes guardados'); }
         catch (ex) { toast(ex.message, 'error'); }
+      });
+      root.querySelector('#new-edition')?.addEventListener('submit', async e => {
+        e.preventDefault();
+        const f = e.target, btn = f.querySelector('[type=submit]'); btn.disabled = true; btn.textContent = 'Generando…';
+        try {
+          const { id } = await api('/admin/editions', { method: 'POST', body: { productId: Number(f.elements.productId.value), vintage: Number(f.elements.vintage.value), size: Number(f.elements.size.value), name: f.elements.name.value } });
+          toast('Edición creada con sus códigos'); go('admin?tab=ediciones&ed=' + id);
+        } catch (ex) { toast(ex.message, 'error'); btn.disabled = false; btn.textContent = 'Generar códigos'; }
       });
       mountEditors(root);
     },

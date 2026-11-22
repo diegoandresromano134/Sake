@@ -68,6 +68,11 @@ async function seed() {
       { id: 2, title: 'Visita a la planta + almuerzo', titleJp: '蔵見学', description: 'Recorrido por la sala de koji y los tanques de fermentación en frío, seguido de un almuerzo japonés.', startsAt: at(26, 15), location: 'Bodega Komatsu', capacity: 14, active: true },
     ],
     rsvps: [{ event_id: 1, user_id: 99, guests: 5 }],
+    editions: [
+      { id: 1, product_id: 1, vintage: 2026, name: 'Primera cosecha', size: 1000, created_at: iso(t - 20 * DAY) },
+      { id: 2, product_id: 2, vintage: 2026, name: 'Primera cosecha', size: 1000, created_at: iso(t - 20 * DAY) },
+    ],
+    codes: [],
     settings: { membership_price: MEMBERSHIP, shipping_flat: 5000, free_shipping_from: 60000, max_reserva: 2 },
     alliances: [
       { id: 1, name: 'Productores de arroz orgánico', category: 'proveedor', description: 'Koshihikari cultivado en Argentina, con trazabilidad por cosecha.', url: null, sort: 1, active: true },
@@ -76,14 +81,27 @@ async function seed() {
       { id: 4, name: 'Comunidad nikkei', category: 'comunidad', description: 'Encuentros, degustaciones y difusión de la cultura del sake.', url: null, sort: 4, active: true },
     ],
   };
+  for (const e of db.editions) for (let n = 1; n <= e.size; n++) db.codes.push({ edition_id: e.id, number: n, code: newCode(), owner_user_id: null, claimed_at: null });
+  // El socio de ejemplo ya registró una botella; la Nº 1 del Frutado queda libre para probar.
+  db.codes[0].code = 'KOMATSU001';
+  Object.assign(db.codes[346], { owner_user_id: 2, claimed_at: iso(t - 15 * DAY) });
   return db;
 }
+
+const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+function newCode() {
+  const b = new Uint8Array(10);
+  try { crypto.getRandomValues(b); } catch { for (let i = 0; i < 10; i++) b[i] = Math.floor(Math.random() * 256); }
+  return Array.from(b, x => ALPHABET[x % ALPHABET.length]).join('');
+}
+const normCode = c => String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+const fmtCode = c => `${c.slice(0, 5)}-${c.slice(5)}`;
 
 let DB = null;
 async function load() {
   if (DB) return DB;
   try { DB = JSON.parse(localStorage.getItem(KEY)); } catch { DB = null; }
-  if (!DB || !DB.products || !DB.alliances) { DB = await seed(); save(); }
+  if (!DB || !DB.products || !DB.alliances || !DB.editions) { DB = await seed(); save(); }
   return DB;
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch { /* sin storage: queda en memoria */ } }
@@ -184,6 +202,16 @@ function productFields(b) {
   if (b.presale_until !== undefined) n.presale_until = b.presale_until ? iso(b.presale_until) : null;
   return n;
 }
+
+function certView(c) {
+  const e = DB.editions.find(x => x.id === c.edition_id), p = DB.products.find(x => x.id === e.product_id);
+  const o = c.owner_user_id ? DB.users.find(u => u.id === c.owner_user_id) : null;
+  const [a, b] = (o?.name || '').split(/\s+/);
+  return { code: fmtCode(c.code), number: c.number, size: e.size, edition: e.name, vintage: e.vintage,
+    product: { id: p.id, name: p.name, nameJp: p.name_jp, slug: p.slug, variety: p.variety, format: p.format, volumeMl: p.volume_ml, accent: p.accent, photo: p.photo || null },
+    claimed: !!o, owner: o ? (b ? `${a} ${b[0]}.` : a) : null, claimedAt: c.claimed_at, mine: !!o && o.id === DB.session };
+}
+const findCode = code => DB.codes.find(c => c.code === normCode(code)) || err(404, 'No encontramos ese código. Revisá que esté bien escrito.');
 
 // ---------- rutas ----------
 const routes = [
@@ -288,6 +316,34 @@ const routes = [
   }],
   ['DELETE', /^\/club\/events\/(\d+)\/rsvp$/, (b, m) => { const u = needMember(); DB.rsvps = DB.rsvps.filter(r => !(r.event_id === Number(m[1]) && r.user_id === u.id)); return { ok: true }; }],
 
+  ['GET', /^\/certificates\/mine$/, () => { const u = needUser(); return { certificates: DB.codes.filter(c => c.owner_user_id === u.id).map(certView) }; }],
+  ['GET', /^\/certificates\/([\w-]+)$/, (b, m) => ({ certificate: certView(findCode(m[1])) })],
+  ['POST', /^\/certificates\/([\w-]+)\/claim$/, (b, m) => {
+    const u = needUser(), c = findCode(m[1]);
+    if (c.owner_user_id && c.owner_user_id !== u.id) err(409, 'Esta botella ya está registrada a nombre de otra persona.');
+    if (!c.owner_user_id) Object.assign(c, { owner_user_id: u.id, claimed_at: iso(now()) });
+    return { certificate: certView(c) };
+  }],
+  ['GET', /^\/admin\/editions$/, () => {
+    needAdmin();
+    return { editions: [...DB.editions].sort((a, c) => c.id - a.id).map(e => ({ id: e.id, productId: e.product_id, product: DB.products.find(p => p.id === e.product_id)?.name,
+      vintage: e.vintage, name: e.name, size: e.size, claimed: DB.codes.filter(c => c.edition_id === e.id && c.owner_user_id).length, createdAt: e.created_at })) };
+  }],
+  ['POST', /^\/admin\/editions$/, (b) => {
+    needAdmin();
+    const productId = Number(b.productId), vintage = Number(b.vintage), size = Number(b.size);
+    if (!DB.products.some(p => p.id === productId)) err(404, 'Producto no encontrado.');
+    if (!Number.isInteger(vintage) || vintage < 2000 || vintage > 2100) err(400, 'Cosecha inválida.');
+    if (!Number.isInteger(size) || size < 1 || size > 5000) err(400, 'En la demo, hasta 5.000 botellas por edición.');
+    const e = { id: ++DB.seq, product_id: productId, vintage, name: s(b.name ?? '', 0, 80, 'Nombre') || null, size, created_at: iso(now()) };
+    DB.editions.push(e);
+    for (let n = 1; n <= size; n++) DB.codes.push({ edition_id: e.id, number: n, code: newCode(), owner_user_id: null, claimed_at: null });
+    return { id: e.id };
+  }],
+  ['GET', /^\/admin\/editions\/(\d+)\/codes(?:\?limit=(\d+))?$/, (b, m) => {
+    needAdmin();
+    return { codes: DB.codes.filter(c => c.edition_id === Number(m[1])).slice(0, Number(m[2] || 200)).map(c => { const v = certView(c); return { number: c.number, code: v.code, owner: v.owner, claimedAt: c.claimed_at }; }) };
+  }],
   ['GET', /^\/admin\/summary$/, () => {
     needAdmin();
     const live = DB.memberships.filter(m => m.status === 'active' && new Date(m.current_period_end) > now());

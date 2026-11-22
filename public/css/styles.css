@@ -345,3 +345,26 @@ dialog.age-gate::backdrop { background: rgba(0,0,0,.92); }
 .mini-select { min-height: 34px; background: var(--carbon); border: 1px solid var(--line); padding: 0 8px; }
 .ally a { color: var(--gold); font-size: 13px; text-decoration: none; }
 .ally .kind { margin-bottom: 2px; }
+
+/* ---------- Certificado de botella numerada ---------- */
+.cert { display: grid; grid-template-columns: 220px 1fr; gap: 32px; padding: 32px; border: 1px solid var(--gold-soft);
+  background: linear-gradient(150deg, rgba(212,175,55,.09), transparent 55%), var(--carbon); position: relative; overflow: hidden; }
+.cert::after { content: '松'; position: absolute; right: -20px; bottom: -70px; font: 700 260px/1 var(--jp); color: rgba(212,175,55,.05); pointer-events: none; }
+.cert-art { display: grid; place-items: center; background: radial-gradient(ellipse at 50% 65%, #1f1c18, var(--black) 70%); border: 1px solid var(--line); min-height: 280px; }
+.cert-art svg, .cert-art img { max-height: 280px; width: 100%; object-fit: cover; }
+.cert-art svg { height: 260px; width: auto; }
+.cert-body { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.cert-top { display: flex; justify-content: space-between; align-items: center; }
+.cert-brand { font: 700 28px/1 var(--jp); color: var(--gold); }
+.cert-brand small { font: 500 12px var(--sans); letter-spacing: .4em; color: var(--paper); margin-left: 8px; }
+.cert-eyebrow { margin: 14px 0 0; font-size: 11px; letter-spacing: .32em; text-transform: uppercase; color: var(--gold); }
+.cert-num { margin: 4px 0; font-size: clamp(40px, 7vw, 64px); font-weight: 300; color: var(--gold-pale); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.cert-num span { font-size: .45em; color: var(--muted); }
+.cert-name { font-size: 24px; }
+.cert-spec { margin: 14px 0 0; }
+.mono { font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; letter-spacing: .08em; }
+.cert.compact { grid-template-columns: 110px 1fr; padding: 20px; gap: 20px; }
+.cert.compact .cert-art { min-height: 150px; } .cert.compact .cert-art svg { height: 140px; }
+.cert.compact .cert-num { font-size: 36px; } .cert.compact .cert-spec { display: none; }
+.cert-list { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); }
+@media (max-width: 640px) { .cert { grid-template-columns: 1fr; } .cert-art { min-height: 200px; } }

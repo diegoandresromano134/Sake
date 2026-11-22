@@ -10,6 +10,7 @@ import { clubView, membersAreaView } from './views/club.js';
 import accountView from './views/account.js';
 import adminView from './views/admin.js';
 import legalView from './views/legal.js';
+import certificateView from './views/certificate.js';
 
 const routes = [
   [/^$/, home],
@@ -27,6 +28,7 @@ const routes = [
   [/^cuenta$/, accountView],
   [/^admin$/, adminView],
   [/^legal$/, legalView],
+  [/^certificado(?:\/([A-Za-z0-9-]+))?$/, certificateView],
 ];
 
 const main = document.getElementById('main');
