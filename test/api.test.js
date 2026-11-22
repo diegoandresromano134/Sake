@@ -155,6 +155,48 @@ test('admin sube y quita la foto real de un producto', async () => {
   assert.equal((await client()('POST', '/admin/products/1/photo', { dataUrl: png })).status, 403);
 });
 
+test('admin edita degustaciones, anuncios, alianzas, fichas y ajustes', async () => {
+  const c = client();
+  await c('POST', '/auth/login', { email: 'admin@komatsu.local', password: 'komatsu-admin' });
+  // Degustaciones: crear, cambiar fecha/cupo, ocultar, borrar
+  const when = new Date(Date.now() + 5 * 864e5).toISOString();
+  assert.equal((await c('POST', '/admin/events', { title: 'Cata de otoño', description: 'Cata guiada', startsAt: when, location: 'Bodega', capacity: 10 })).status, 201);
+  let ev = (await c('GET', '/admin/events')).body.events.find(e => e.title === 'Cata de otoño');
+  const later = new Date(Date.now() + 9 * 864e5).toISOString();
+  assert.equal((await c('PATCH', `/admin/events/${ev.id}`, { title: 'Cata de otoño II', description: 'Cata guiada', startsAt: later, location: 'Bodega', capacity: 30 })).status, 200);
+  ev = (await c('GET', '/admin/events')).body.events.find(e => e.id === ev.id);
+  assert.equal(ev.capacity, 30); assert.equal(ev.startsAt, later); assert.equal(ev.title, 'Cata de otoño II');
+  assert.equal((await c('DELETE', `/admin/events/${ev.id}`)).status, 200);
+  assert.ok(!(await c('GET', '/admin/events')).body.events.some(e => e.id === ev.id));
+  // Anuncios: editar y borrar
+  const ann = (await c('GET', '/admin/announcements')).body.announcements[0];
+  await c('PATCH', `/admin/announcements/${ann.id}`, { kind: 'premio', title: 'Título nuevo', body: 'Texto nuevo', public: true });
+  assert.ok((await client()('GET', '/news')).body.news.some(n => n.title === 'Título nuevo'));
+  await c('DELETE', `/admin/announcements/${ann.id}`);
+  assert.ok(!(await c('GET', '/admin/announcements')).body.announcements.some(a => a.id === ann.id));
+  // Alianzas: alta, edición, baja
+  assert.equal((await c('POST', '/admin/alliances', { name: 'Arrocera del Litoral', category: 'proveedor', description: 'Arroz', url: 'https://ejemplo.com' })).status, 201);
+  let al = (await client()('GET', '/alliances')).body.alliances.find(a => a.name === 'Arrocera del Litoral');
+  assert.ok(al);
+  assert.equal((await c('PATCH', `/admin/alliances/${al.id}`, { name: 'Arrocera Norte', category: 'proveedor', active: false })).status, 200);
+  assert.ok(!(await client()('GET', '/alliances')).body.alliances.some(a => a.id === al.id));
+  assert.equal((await c('POST', '/admin/alliances', { name: 'Mala', url: 'javascript:alert(1)' })).status, 400);
+  await c('DELETE', `/admin/alliances/${al.id}`);
+  // Ficha de producto y producto nuevo
+  await c('PATCH', '/admin/products/1', { tagline: 'Bajada nueva', tasting_notes: 'Notas nuevas', ingredients: 'Agua, arroz, koji' });
+  const p1 = (await client()('GET', '/products/komatsu-frutado-720')).body.product;
+  assert.equal(p1.tagline, 'Bajada nueva'); assert.equal(p1.ingredients, 'Agua, arroz, koji');
+  const np = await c('POST', '/admin/products', { name: 'Komatsu Yuzu', variety: 'yuzu', price: 31000, member_price: 26000, stock: 10, active: true });
+  assert.equal(np.status, 201);
+  assert.ok((await client()('GET', '/products')).body.products.some(p => p.slug === np.body.slug));
+  // Ajustes: precio del Club y envío
+  await c('PATCH', '/admin/settings', { membership_price: 25000, shipping_flat: 7000, free_shipping_from: 80000 });
+  assert.equal((await client()('GET', '/club/plan')).body.monthlyPrice, 25000);
+  const q = (await client()('POST', '/cart/quote', { items: [{ slug: 'komatsu-tokkuri-frutado-330', qty: 1 }] })).body;
+  assert.equal(q.shipping, 7000); assert.equal(q.freeShippingFrom, 80000);
+  assert.equal((await client()('PATCH', '/admin/settings', { membership_price: 1 })).status, 403);
+});
+
 test('escrituras sin JSON se rechazan (CSRF)', async () => {
   const res = await fetch(base + '/auth/login', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'email=a&password=b' });
   assert.equal(res.status, 415);

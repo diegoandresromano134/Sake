@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS products (
   slug          TEXT NOT NULL UNIQUE,
   name          TEXT NOT NULL,
   name_jp       TEXT NOT NULL,
-  variety       TEXT NOT NULL CHECK (variety IN ('frutado','cereza','duo','reserva')),
+  variety       TEXT NOT NULL,
   format        TEXT NOT NULL CHECK (format IN ('botella','tokkuri','pack')),
   volume_ml     INTEGER NOT NULL,
   vintage       INTEGER NOT NULL,
@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS products (
   description   TEXT NOT NULL,
   tasting_notes TEXT NOT NULL,
   pairing       TEXT NOT NULL,
+  ingredients   TEXT,
   abv           REAL NOT NULL,
   price         INTEGER NOT NULL,
   member_price  INTEGER NOT NULL,
@@ -121,7 +122,8 @@ CREATE TABLE IF NOT EXISTS events (
   description TEXT NOT NULL,
   starts_at   TEXT NOT NULL,
   location    TEXT NOT NULL,
-  capacity    INTEGER NOT NULL
+  capacity    INTEGER NOT NULL,
+  active      INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS event_rsvps (
@@ -130,6 +132,21 @@ CREATE TABLE IF NOT EXISTS event_rsvps (
   guests     INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (event_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS alliances (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT NOT NULL,
+  category    TEXT NOT NULL DEFAULT 'proveedor',
+  description TEXT NOT NULL DEFAULT '',
+  url         TEXT,
+  sort        INTEGER NOT NULL DEFAULT 0,
+  active      INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE INDEX IF NOT EXISTS idx_orders_user ON orders(user_id);
@@ -201,6 +218,10 @@ export function openDb(file) {
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
+  if (!db.prepare("SELECT 1 FROM pragma_table_info('events') WHERE name='active'").get())
+    db.exec('ALTER TABLE events ADD COLUMN active INTEGER NOT NULL DEFAULT 1');
+  if (!db.prepare("SELECT 1 FROM pragma_table_info('products') WHERE name='ingredients'").get())
+    db.exec('ALTER TABLE products ADD COLUMN ingredients TEXT');
   // Migración: foto real del producto (ruta pública /uploads/...)
   if (!db.prepare("SELECT 1 FROM pragma_table_info('products') WHERE name='photo'").get())
     db.exec('ALTER TABLE products ADD COLUMN photo TEXT');
@@ -241,6 +262,14 @@ function seed(db) {
       'Cata comparativa con el maestro sakero, con maridaje de bocados nikkei. Cupos limitados.', d(12, 22), 'Bodega Komatsu', 20);
     ins.run('Visita a la planta + almuerzo', '蔵見学',
       'Recorrido por la sala de koji y los tanques de fermentación en frío, seguido de un almuerzo japonés.', d(26, 15), 'Bodega Komatsu', 14);
+  }
+
+  if (db.prepare('SELECT COUNT(*) AS n FROM alliances').get().n === 0) {
+    const ins = db.prepare('INSERT INTO alliances (name,category,description,sort) VALUES (?,?,?,?)');
+    ins.run('Productores de arroz orgánico', 'proveedor', 'Koshihikari cultivado en Argentina, con trazabilidad por cosecha.', 1);
+    ins.run('Restaurantes japoneses y nikkei', 'restaurante', 'Formato Tokkuri 330 ml pensado para el servicio en mesa.', 2);
+    ins.run('Vinotecas y tiendas gourmet', 'punto de venta', 'Puntos de venta seleccionados para cada nueva tirada.', 3);
+    ins.run('Comunidad nikkei', 'comunidad', 'Encuentros, degustaciones y difusión de la cultura del sake.', 4);
   }
 
   const adminEmail = process.env.ADMIN_EMAIL || 'admin@komatsu.local';

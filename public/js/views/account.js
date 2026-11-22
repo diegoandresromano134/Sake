@@ -18,7 +18,7 @@ export default async function account({ query }) {
     body = orders.length ? orders.map(orderDetail).join('') : '<div class="empty"><span class="kanji">空</span><p class="muted">Todavía no hiciste pedidos.</p><a class="btn gold" href="#/shop">Ir al Shop</a></div>';
   } else if (tab === 'club') {
     const { membership: m, payments } = await api('/membership');
-    body = !m ? `<div class="panel gold"><h3>Todavía no sos socio</h3><p class="muted">Sumate al Club por ${money(20000)} por mes.</p><a class="btn gold" href="#/club">Conocer el Club</a></div>` : `
+    body = !m ? `<div class="panel gold"><h3>Todavía no sos socio</h3><p class="muted">Sumate al Club por ${money((await api('/settings')).membershipPrice)} por mes.</p><a class="btn gold" href="#/club">Conocer el Club</a></div>` : `
       <div class="grid-2" style="align-items:start">
         <div>${m.active ? memberCard(u) : ''}</div>
         <div class="panel">

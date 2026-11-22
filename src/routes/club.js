@@ -1,16 +1,16 @@
 import { Router } from 'express';
 import { requireAuth, requireMember } from '../auth.js';
 import { getMembership, publicMembership, subscribe, setCancel } from '../membership.js';
-import { CONFIG } from '../config.js';
+import { getSettings, publicSettings } from '../settings.js';
 import { HttpError, int } from '../security.js';
 
 export default function clubRoutes(db) {
   const r = Router();
 
   r.get('/club/plan', (req, res) => res.json({
-    monthlyPrice: CONFIG.membershipMonthly,
+    monthlyPrice: getSettings(db).membership_price,
     benefits: [
-      { title: 'Precios de socio', jp: '会員価格', text: '15% menos en todo el catálogo, todo el año.' },
+      { title: 'Precios de socio', jp: '会員価格', text: 'Precios especiales en todo el catálogo, todo el año.' },
       { title: 'Prioridad en tiradas limitadas', jp: '先行予約', text: 'Preventa exclusiva de cada cosecha antes que el Shop Público.' },
       { title: 'Reserva Shokunin', jp: '職人限定', text: 'Acceso a ediciones numeradas que no salen a la venta pública.' },
       { title: 'Envío sin cargo', jp: '送料無料', text: 'En todos tus pedidos del Member Shop.' },
@@ -32,6 +32,9 @@ export default function clubRoutes(db) {
   r.post('/membership/cancel', requireAuth, (req, res) => res.json({ membership: publicMembership(setCancel(db, req.user.id, true)) }));
   r.post('/membership/resume', requireAuth, (req, res) => res.json({ membership: publicMembership(setCancel(db, req.user.id, false)) }));
 
+  r.get('/settings', (req, res) => res.json(publicSettings(getSettings(db))));
+  r.get('/alliances', (req, res) => res.json({ alliances: db.prepare('SELECT id,name,category,description,url FROM alliances WHERE active=1 ORDER BY sort,id').all().map(a => ({ ...a })) }));
+
   // Novedades públicas (para la home)
   r.get('/news', (req, res) => {
     res.json({ news: db.prepare('SELECT id,kind,title,title_jp AS titleJp,body,created_at AS createdAt FROM announcements WHERE public=1 ORDER BY id DESC LIMIT 6').all().map(x => ({ ...x })) });
@@ -43,7 +46,7 @@ export default function clubRoutes(db) {
     const events = db.prepare(`SELECT e.*, 
         (SELECT COALESCE(SUM(1+guests),0) FROM event_rsvps r WHERE r.event_id=e.id) AS taken,
         (SELECT guests FROM event_rsvps r WHERE r.event_id=e.id AND r.user_id=?) AS myGuests
-      FROM events e WHERE e.starts_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day') ORDER BY e.starts_at`).all(req.user.id);
+      FROM events e WHERE e.active = 1 AND e.starts_at >= strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day') ORDER BY e.starts_at`).all(req.user.id);
     res.json({
       announcements: announcements.map(a => ({ ...a })),
       events: events.map(e => ({

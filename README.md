@@ -63,6 +63,21 @@ sake/
 | `#/cuenta` | Pedidos, membresía (baja/reactivación, historial de pagos), perfil, contraseña |
 | `#/admin` | KPIs, estados de pedidos, precios/stock/preventas, socios, anuncios y eventos |
 
+## Qué se edita desde el panel (`#/admin`)
+
+| Pestaña | Qué se puede cambiar |
+|---|---|
+| Pedidos | Estado de cada pedido (cancelar devuelve el stock) |
+| Productos | Precios, precio socio, stock, cosecha, preventa, exclusivo, visible, **foto**; ficha completa (nombre, japonés, estilo, formato, volumen, graduación, textos, notas de cata, maridaje, ingredientes) y **productos nuevos** |
+| Degustaciones | Crear, cambiar **fecha, hora, cupo, lugar** y textos, ocultar o eliminar; ver quién reservó |
+| Anuncios y premios | Crear, editar, eliminar; elegir si es público o sólo para socios |
+| Marcas y alianzas | Proveedores, restaurantes, puntos de venta: crear, editar, ocultar, eliminar (se ven en La Bodega) |
+| Socios | Listado de socios y vencimientos |
+| Ajustes | Cuota mensual del Club, costo de envío, envío gratis desde, tope por socio en exclusivos |
+
+Siguen fijos en el código los textos institucionales de La Bodega (historia, filosofía, materias primas)
+y la lista de beneficios del Club.
+
 ## Fotos de productos
 
 En **Administración → Productos y stock**, cada producto tiene **Subir foto**. La imagen se achica

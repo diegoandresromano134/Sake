@@ -327,3 +327,21 @@ dialog.age-gate::backdrop { background: rgba(0,0,0,.92); }
 .empty { text-align: center; padding: 64px 0; display: grid; gap: 14px; justify-items: center; }
 .empty .kanji { font: 700 64px/1 var(--jp); color: var(--line); }
 .loading { padding: 120px 0; text-align: center; color: var(--muted); letter-spacing: .3em; font-size: 12px; text-transform: uppercase; }
+
+/* ---------- Editor del panel ---------- */
+.admin-h { font-size: 16px; letter-spacing: .12em; text-transform: uppercase; margin: 36px 0 10px; color: var(--gold-pale); }
+.editor-item { border: 1px solid var(--line); background: var(--carbon); margin-bottom: 8px; }
+.editor-item > summary { list-style: none; cursor: pointer; padding: 14px 18px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: baseline; }
+.editor-item > summary::-webkit-details-marker { display: none; }
+.editor-item > summary::after { content: 'Editar'; font-size: 11px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); margin-left: auto; }
+.editor-item[open] > summary::after { content: 'Cerrar'; }
+.editor-new > summary::after { content: ''; }
+.editor-new { border-style: dashed; border-color: var(--gold-soft); }
+.editor-meta { font-size: 13px; }
+.editor-form { padding: 4px 18px 18px; border-top: 1px solid var(--line); padding-top: 16px; }
+.editor-grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }
+.editor-grid .full { grid-column: 1 / -1; }
+.attendees ul { margin: 6px 0 0; padding-left: 18px; font-size: 14px; }
+.mini-select { min-height: 34px; background: var(--carbon); border: 1px solid var(--line); padding: 0 8px; }
+.ally a { color: var(--gold); font-size: 13px; text-decoration: none; }
+.ally .kind { margin-bottom: 2px; }

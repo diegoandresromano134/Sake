@@ -1,4 +1,4 @@
-import { CONFIG } from './config.js';
+import { getSettings } from './settings.js';
 import { chargeSubscription } from './payments.js';
 import { HttpError } from './security.js';
 import { tx } from './db.js';
@@ -33,7 +33,7 @@ export function publicMembership(m) {
 export async function subscribe(db, userId) {
   const current = getMembership(db, userId);
   if (current && isMember(db, userId)) throw new HttpError(409, 'Ya sos socio del Club Komatsu.');
-  const amount = CONFIG.membershipMonthly;
+  const amount = getSettings(db).membership_price;
   const pay = await chargeSubscription({ amount, userId });
   if (!pay.ok) throw new HttpError(402, 'No se pudo procesar el pago de la membresía.');
   const start = new Date().toISOString();
@@ -69,13 +69,14 @@ export async function renewDue(db) {
       db.prepare(`UPDATE memberships SET status='expired' WHERE id=?`).run(m.id);
       continue;
     }
-    const pay = await chargeSubscription({ amount: m.monthly_price, userId: m.user_id });
+    const price = getSettings(db).membership_price;
+    const pay = await chargeSubscription({ amount: price, userId: m.user_id });
     if (!pay.ok) { db.prepare(`UPDATE memberships SET status='past_due' WHERE id=?`).run(m.id); continue; }
     const start = m.current_period_end, end = addMonth(start);
     tx(db, () => {
-      db.prepare('UPDATE memberships SET current_period_end=? WHERE id=?').run(end, m.id);
+      db.prepare('UPDATE memberships SET current_period_end=?, monthly_price=? WHERE id=?').run(end, price, m.id);
       db.prepare(`INSERT INTO membership_payments (user_id,amount,period_start,period_end,status,provider_ref) VALUES (?,?,?,?,'aprobado',?)`)
-        .run(m.user_id, m.monthly_price, start, end, pay.ref);
+        .run(m.user_id, price, start, end, pay.ref);
     });
     renewed++;
   }

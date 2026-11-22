@@ -23,7 +23,7 @@ export async function shopView({ query }) {
       <div class="shop-head"><div>${eyebrow('Shop Público', '販売')}<h1>Catálogo</h1></div></div>
       ${member
         ? `<div class="notice"><span class="hanko">${'<span>小</span><span>松</span>'}</span><p>Estás viendo tus <strong>precios de socio</strong>. Las tiradas exclusivas están en el Member Shop.</p><a class="btn small gold" href="#/club/shop">Ir al Member Shop</a></div>`
-        : `<div class="notice"><p>Los socios del Club pagan 15% menos, tienen envío sin cargo y prioridad en cada cosecha.</p><a class="btn small" href="#/club">Conocer el Club</a></div>`}
+        : `<div class="notice"><p>Los socios del Club tienen precios especiales, envío sin cargo y prioridad en cada cosecha.</p><a class="btn small" href="#/club">Conocer el Club</a></div>`}
       ${grid(products, member, 'shop', query.formato)}
     </div></section>`,
   };
@@ -85,7 +85,7 @@ export async function productView({ params }) {
             <dt>Maridaje</dt><dd>${esc(p.pairing)}</dd>
             <dt>Graduación</dt><dd>${p.abv}% vol.</dd>
             <dt>Servicio</dt><dd>Frío (8–10 °C) o a temperatura ambiente, en ochoko o copa de vino blanco.</dd>
-            <dt>Ingredientes</dt><dd>Agua, arroz Koshihikari orgánico, koji de arroz, levadura${p.variety === 'cereza' ? ', cereza' : ''}. Sin TACC.</dd>
+            <dt>Ingredientes</dt><dd>${p.ingredients ? esc(p.ingredients) : `Agua, arroz Koshihikari orgánico, koji de arroz, levadura${p.variety === 'cereza' ? ', cereza' : ''}. Sin TACC.`}</dd>
           </dl>
         </div>
       </div>
@@ -93,7 +93,7 @@ export async function productView({ params }) {
     mount(root) {
       const out = root.querySelector('#qty');
       root.querySelectorAll('[data-q]').forEach(b => b.addEventListener('click', () => {
-        qty = Math.max(1, Math.min(p.membersOnly ? 2 : 12, qty + Number(b.dataset.q))); out.textContent = qty;
+        qty = Math.max(1, Math.min(12, qty + Number(b.dataset.q))); out.textContent = qty;
       }));
       root.querySelector('#add')?.addEventListener('click', () => {
         addToCart(p.slug, qty);

@@ -1,4 +1,5 @@
-import { eyebrow } from '../ui.js';
+import { eyebrow, esc } from '../ui.js';
+import { api } from '../api.js';
 
 const HOTSPOTS = [
   { x: 20, y: 52, t: 'Tanques cilindrocónicos', d: 'Acero inoxidable con camisa de frío y chiller: la fermentación se mantiene a baja temperatura durante semanas.' },
@@ -46,6 +47,7 @@ function mountTour(root) {
 
 export default async function bodega({ params }) {
   const section = params[0];
+  const { alliances } = await api('/alliances');
   return {
     title: 'La Bodega',
     scrollTo: section || null,
@@ -108,11 +110,7 @@ export default async function bodega({ params }) {
       ${eyebrow('Marcas y alianzas', '提携')}
       <h2>Con quiénes trabajamos.</h2>
       <hr class="gold-rule">
-      <div class="grid-3">
-        <div class="ally"><b>Productores de arroz orgánico</b><span class="muted">Koshihikari cultivado en Argentina, con trazabilidad por cosecha.</span></div>
-        <div class="ally"><b>Restaurantes japoneses y nikkei</b><span class="muted">Formato Tokkuri 330 ml pensado para el servicio en mesa.</span></div>
-        <div class="ally"><b>Vinotecas y tiendas gourmet</b><span class="muted">Puntos de venta seleccionados para cada nueva tirada.</span></div>
-        <div class="ally"><b>Comunidad nikkei</b><span class="muted">Encuentros, degustaciones y difusión de la cultura del sake.</span></div>
+      <div class="grid-3">${alliances.map(a => `<div class="ally"><span class="kind">${esc(a.category)}</span><b>${esc(a.name)}</b>${a.description ? `<span class="muted">${esc(a.description)}</span>` : ''}${a.url ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">Visitar sitio ↗</a>` : ''}</div>`).join('') || '<p class="muted">Pronto vamos a sumar a nuestros aliados.</p>'}
       </div>
       <p class="muted" style="margin-top:20px">¿Tenés un restaurante o tienda? Escribinos para sumar Komatsu a tu carta.</p>
     </div></section>`,

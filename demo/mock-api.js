@@ -7,7 +7,8 @@ export class ApiError extends Error {
 }
 
 const KEY = 'komatsu.demo.db.v1';
-const MEMBERSHIP = 20000, SHIP = 5000, FREE_FROM = 60000, MAX_QTY = 12, MAX_RESERVA = 2;
+const MEMBERSHIP = 20000, MAX_QTY = 12;
+const SET = () => DB.settings || (DB.settings = { membership_price: 20000, shipping_flat: 5000, free_shipping_from: 60000, max_reserva: 2 });
 const DAY = 864e5;
 const now = () => new Date();
 const iso = d => new Date(d).toISOString();
@@ -42,7 +43,7 @@ async function seed() {
     products: PRODUCTS.map((p, i) => ({
       id: i + 1, slug: p[0], name: p[1], name_jp: p[2], variety: p[3], format: p[4], volume_ml: p[5], vintage: 2026,
       tagline: p[6], description: p[7], tasting_notes: p[8], pairing: p[9], abv: p[10], price: p[11], member_price: p[12],
-      stock: p[13], accent: p[14], members_only: p[15], active: 1,
+      stock: p[13], accent: p[14], members_only: p[15], active: 1, sort: i + 1, ingredients: null,
       presale_until: p[3] === 'cereza' && p[4] === 'botella' ? iso(t + 14 * DAY) : null,
       image: p[4] === 'tokkuri' ? 'tokkuri' : 'botella',
     })),
@@ -63,10 +64,17 @@ async function seed() {
       { id: 1, kind: 'lanzamiento', title: 'Cosecha 2026: preventa para socios', titleJp: '新酒 先行予約', body: 'La etiqueta 2026 del Junmai Cereza abre en preventa exclusiva para el Club durante 14 días antes de llegar al Shop Público.', public: 1, createdAt: iso(t - 10 * DAY) },
     ],
     events: [
-      { id: 1, title: 'Degustación guiada: Frutado vs. Cereza', titleJp: '利き酒会', description: 'Cata comparativa con el maestro sakero, con maridaje de bocados nikkei. Cupos limitados.', startsAt: at(12, 22), location: 'Bodega Komatsu', capacity: 20 },
-      { id: 2, title: 'Visita a la planta + almuerzo', titleJp: '蔵見学', description: 'Recorrido por la sala de koji y los tanques de fermentación en frío, seguido de un almuerzo japonés.', startsAt: at(26, 15), location: 'Bodega Komatsu', capacity: 14 },
+      { id: 1, title: 'Degustación guiada: Frutado vs. Cereza', titleJp: '利き酒会', description: 'Cata comparativa con el maestro sakero, con maridaje de bocados nikkei. Cupos limitados.', startsAt: at(12, 22), location: 'Bodega Komatsu', capacity: 20, active: true },
+      { id: 2, title: 'Visita a la planta + almuerzo', titleJp: '蔵見学', description: 'Recorrido por la sala de koji y los tanques de fermentación en frío, seguido de un almuerzo japonés.', startsAt: at(26, 15), location: 'Bodega Komatsu', capacity: 14, active: true },
     ],
     rsvps: [{ event_id: 1, user_id: 99, guests: 5 }],
+    settings: { membership_price: MEMBERSHIP, shipping_flat: 5000, free_shipping_from: 60000, max_reserva: 2 },
+    alliances: [
+      { id: 1, name: 'Productores de arroz orgánico', category: 'proveedor', description: 'Koshihikari cultivado en Argentina, con trazabilidad por cosecha.', url: null, sort: 1, active: true },
+      { id: 2, name: 'Restaurantes japoneses y nikkei', category: 'restaurante', description: 'Formato Tokkuri 330 ml pensado para el servicio en mesa.', url: null, sort: 2, active: true },
+      { id: 3, name: 'Vinotecas y tiendas gourmet', category: 'punto de venta', description: 'Puntos de venta seleccionados para cada nueva tirada.', url: null, sort: 3, active: true },
+      { id: 4, name: 'Comunidad nikkei', category: 'comunidad', description: 'Encuentros, degustaciones y difusión de la cultura del sake.', url: null, sort: 4, active: true },
+    ],
   };
   return db;
 }
@@ -75,7 +83,7 @@ let DB = null;
 async function load() {
   if (DB) return DB;
   try { DB = JSON.parse(localStorage.getItem(KEY)); } catch { DB = null; }
-  if (!DB || !DB.products) { DB = await seed(); save(); }
+  if (!DB || !DB.products || !DB.alliances) { DB = await seed(); save(); }
   return DB;
 }
 function save() { try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch { /* sin storage: queda en memoria */ } }
@@ -102,7 +110,7 @@ const s = (v, min, max, field) => { const t = typeof v === 'string' ? v.trim() :
 function productView(p, member) {
   const presale = p.presale_until && new Date(p.presale_until) > now();
   return { id: p.id, slug: p.slug, name: p.name, nameJp: p.name_jp, variety: p.variety, format: p.format, volumeMl: p.volume_ml, vintage: p.vintage,
-    tagline: p.tagline, description: p.description, tastingNotes: p.tasting_notes, pairing: p.pairing, abv: p.abv, image: p.image, photo: p.photo || null, accent: p.accent,
+    tagline: p.tagline, description: p.description, tastingNotes: p.tasting_notes, pairing: p.pairing, ingredients: p.ingredients || null, sort: p.sort, abv: p.abv, image: p.image, photo: p.photo || null, accent: p.accent,
     price: p.price, memberPrice: p.member_price, finalPrice: member ? p.member_price : p.price, stock: p.stock, inStock: p.stock > 0,
     lowStock: p.stock > 0 && p.stock <= 10, membersOnly: !!p.members_only, presaleUntil: presale ? p.presale_until : null,
     purchasable: p.stock > 0 && (member || (!p.members_only && !presale)), glutenFree: true };
@@ -121,15 +129,15 @@ function quote(items, member, delivery) {
     if (v.membersOnly && !member) problem = 'Exclusivo para socios del Club.';
     else if (v.presaleUntil && !member) problem = 'En preventa exclusiva para socios.';
     else if (p.stock < qty) problem = p.stock > 0 ? `Sólo quedan ${p.stock} unidades.` : 'Sin stock.';
-    else if (v.membersOnly && qty > MAX_RESERVA) problem = `Máximo ${MAX_RESERVA} por socio.`;
+    else if (v.membersOnly && qty > SET().max_reserva) problem = `Máximo ${SET().max_reserva} por socio.`;
     const lineTotal = v.finalPrice * qty;
     lines.push({ ...v, qty, lineTotal, problem });
     if (problem) { issues.push({ slug, message: problem }); continue; }
     subtotal += lineTotal; regular += p.price * qty;
   }
   const ok = lines.filter(l => !l.problem);
-  const shipping = !ok.length || delivery === 'retiro' || member || subtotal >= FREE_FROM ? 0 : SHIP;
-  return { member, delivery, lines, issues, subtotal, savings: regular - subtotal, shipping, total: subtotal + shipping, freeShippingFrom: FREE_FROM };
+  const shipping = !ok.length || delivery === 'retiro' || member || subtotal >= SET().free_shipping_from ? 0 : SET().shipping_flat;
+  return { member, delivery, lines, issues, subtotal, savings: regular - subtotal, shipping, total: subtotal + shipping, freeShippingFrom: SET().free_shipping_from };
 }
 
 const orderView = o => ({ code: o.code, status: o.status, channel: o.channel, createdAt: o.created_at, email: DB.users.find(u => u.id === o.user_id)?.email,
@@ -138,13 +146,44 @@ const orderView = o => ({ code: o.code, status: o.status, channel: o.channel, cr
 const taken = (eid, exceptUser) => DB.rsvps.filter(r => r.event_id === eid && r.user_id !== exceptUser).reduce((n, r) => n + 1 + r.guests, 0);
 
 const BENEFITS = [
-  { title: 'Precios de socio', jp: '会員価格', text: '15% menos en todo el catálogo, todo el año.' },
+  { title: 'Precios de socio', jp: '会員価格', text: 'Precios especiales en todo el catálogo, todo el año.' },
   { title: 'Prioridad en tiradas limitadas', jp: '先行予約', text: 'Preventa exclusiva de cada cosecha antes que el Shop Público.' },
   { title: 'Reserva Shokunin', jp: '職人限定', text: 'Acceso a ediciones numeradas que no salen a la venta pública.' },
   { title: 'Envío sin cargo', jp: '送料無料', text: 'En todos tus pedidos del Member Shop.' },
   { title: 'Degustaciones en la bodega', jp: '利き酒会', text: 'Catas guiadas, visitas a la planta y encuentros con el maestro sakero.' },
   { title: 'Anuncios y premios', jp: 'お知らせ', text: 'Novedades, reconocimientos y lanzamientos antes que nadie.' },
 ];
+
+const annFields = b => ({ kind: ['anuncio', 'premio', 'lanzamiento'].includes(b.kind) ? b.kind : 'anuncio', title: s(b.title, 3, 140, 'Título'),
+  titleJp: s(b.titleJp ?? '', 0, 60, 'Título JP') || null, body: s(b.body, 3, 2000, 'Texto'), public: b.public ? 1 : 0 });
+const evtFields = b => {
+  const d = new Date(b.startsAt); if (isNaN(d)) err(400, 'Fecha inválida.');
+  const cap = Number(b.capacity); if (!Number.isInteger(cap) || cap < 1) err(400, 'Cupo inválido.');
+  return { title: s(b.title, 3, 140, 'Título'), titleJp: s(b.titleJp ?? '', 0, 60, 'Título JP') || null, description: s(b.description, 3, 2000, 'Descripción'),
+    startsAt: d.toISOString(), location: s(b.location, 2, 140, 'Lugar'), capacity: cap, active: b.active !== false };
+};
+const allyFields = b => {
+  const url = s(b.url ?? '', 0, 300, 'Sitio web');
+  if (url && !/^https?:\/\//i.test(url)) err(400, 'El sitio web debe empezar con http:// o https://');
+  return { name: s(b.name, 2, 120, 'Nombre'), category: s(b.category ?? '', 0, 60, 'Tipo') || 'proveedor', description: s(b.description ?? '', 0, 500, 'Descripción'),
+    url: url || null, sort: Number(b.sort) || 0, active: b.active !== false };
+};
+function productFields(b) {
+  const n = {};
+  const T = { name: [2, 80, 'Nombre'], name_jp: [0, 40, 'Nombre en japonés'], tagline: [0, 200, 'Bajada'], description: [0, 2000, 'Descripción'],
+    tasting_notes: [0, 1000, 'Notas de cata'], pairing: [0, 500, 'Maridaje'], ingredients: [0, 500, 'Ingredientes'], variety: [2, 40, 'Estilo'] };
+  for (const [k, [mi, ma, f]] of Object.entries(T)) if (b[k] !== undefined) n[k] = s(b[k] ?? '', mi, ma, f);
+  for (const k of ['price', 'member_price', 'stock', 'vintage', 'volume_ml', 'sort']) if (b[k] !== undefined && b[k] !== '') {
+    const v = Number(b[k]); if (!Number.isInteger(v) || v < 0) err(400, 'Valor numérico inválido.'); n[k] = v;
+  }
+  if (b.abv !== undefined && b.abv !== '') n.abv = Number(b.abv);
+  if (b.format !== undefined) { n.format = ['botella', 'tokkuri', 'pack'].includes(b.format) ? b.format : 'botella'; n.image = n.format === 'tokkuri' ? 'tokkuri' : 'botella'; }
+  if (b.accent !== undefined) n.accent = b.accent === 'red' ? 'red' : 'gold';
+  if (b.active !== undefined) n.active = b.active ? 1 : 0;
+  if (b.members_only !== undefined) n.members_only = b.members_only ? 1 : 0;
+  if (b.presale_until !== undefined) n.presale_until = b.presale_until ? iso(b.presale_until) : null;
+  return n;
+}
 
 // ---------- rutas ----------
 const routes = [
@@ -178,7 +217,7 @@ const routes = [
 
   ['GET', /^\/products(?:\?channel=(\w+))?$/, (b, m) => {
     const u = user(), member = !!u && isMember(u.id), channel = m[1] === 'member' ? 'member' : 'publico';
-    return { channel, member, products: DB.products.filter(p => p.active && (channel === 'member' || !p.members_only)).map(p => productView(p, member)) };
+    return { channel, member, products: DB.products.filter(p => p.active && (channel === 'member' || !p.members_only)).sort((a, c) => a.sort - c.sort || a.id - c.id).map(p => productView(p, member)) };
   }],
   ['GET', /^\/products\/([\w-]+)$/, (b, m) => {
     const p = DB.products.find(x => x.slug === m[1] && x.active) || err(404, 'Producto no encontrado.');
@@ -204,7 +243,9 @@ const routes = [
   ['GET', /^\/orders$/, () => { const u = needUser(); return { orders: DB.orders.filter(o => o.user_id === u.id).sort((a, c) => c.id - a.id).map(orderView) }; }],
   ['GET', /^\/orders\/([\w-]+)$/, (b, m) => { const u = needUser(); const o = DB.orders.find(x => x.code === m[1] && x.user_id === u.id) || err(404, 'Pedido no encontrado.'); return { order: orderView(o) }; }],
 
-  ['GET', /^\/club\/plan$/, () => ({ monthlyPrice: MEMBERSHIP, benefits: BENEFITS })],
+  ['GET', /^\/club\/plan$/, () => ({ monthlyPrice: SET().membership_price, benefits: BENEFITS })],
+  ['GET', /^\/settings$/, () => ({ membershipPrice: SET().membership_price, shippingFlat: SET().shipping_flat, freeShippingFrom: SET().free_shipping_from, maxReserva: SET().max_reserva })],
+  ['GET', /^\/alliances$/, () => ({ alliances: [...DB.alliances].filter(a => a.active).sort((a, c) => a.sort - c.sort || a.id - c.id) })],
   ['GET', /^\/membership$/, () => {
     const u = needUser();
     return { membership: pubMembership(membershipOf(u.id)), payments: DB.payments.filter(p => p.user_id === u.id).reverse()
@@ -216,9 +257,9 @@ const routes = [
     if (isMember(u.id)) err(409, 'Ya sos socio del Club Komatsu.');
     const start = iso(now()), end = addMonth(start);
     let m = membershipOf(u.id);
-    if (m) Object.assign(m, { status: 'active', monthly_price: MEMBERSHIP, current_period_end: end, cancel_at_period_end: 0 });
-    else DB.memberships.push(m = { user_id: u.id, status: 'active', monthly_price: MEMBERSHIP, started_at: start, current_period_end: end, cancel_at_period_end: 0, member_number: `KM-${String(u.id).padStart(5, '0')}` });
-    DB.payments.push({ user_id: u.id, amount: MEMBERSHIP, period_start: start, period_end: end, status: 'aprobado', ref: `SIM-SUB-${u.id}-${rand(4)}`, created_at: start });
+    if (m) Object.assign(m, { status: 'active', monthly_price: SET().membership_price, current_period_end: end, cancel_at_period_end: 0 });
+    else DB.memberships.push(m = { user_id: u.id, status: 'active', monthly_price: SET().membership_price, started_at: start, current_period_end: end, cancel_at_period_end: 0, member_number: `KM-${String(u.id).padStart(5, '0')}` });
+    DB.payments.push({ user_id: u.id, amount: SET().membership_price, period_start: start, period_end: end, status: 'aprobado', ref: `SIM-SUB-${u.id}-${rand(4)}`, created_at: start });
     return { membership: pubMembership(m) };
   }],
   ['POST', /^\/membership\/(cancel|resume)$/, (b, m) => {
@@ -232,7 +273,7 @@ const routes = [
     const u = needMember(), cutoff = Date.now() - DAY;
     return {
       announcements: [...DB.announcements].sort((a, c) => c.id - a.id),
-      events: DB.events.filter(e => new Date(e.startsAt) >= cutoff).sort((a, c) => a.startsAt.localeCompare(c.startsAt)).map(e => {
+      events: DB.events.filter(e => e.active !== false && new Date(e.startsAt) >= cutoff).sort((a, c) => a.startsAt.localeCompare(c.startsAt)).map(e => {
         const mine = DB.rsvps.find(r => r.event_id === e.id && r.user_id === u.id);
         return { ...e, seatsLeft: Math.max(0, e.capacity - taken(e.id)), attending: !!mine, myGuests: mine?.guests ?? 0 };
       }),
@@ -266,11 +307,19 @@ const routes = [
   ['PATCH', /^\/admin\/products\/(\d+)$/, (b, m) => {
     needAdmin();
     const p = DB.products.find(x => x.id === Number(m[1])) || err(404, 'Producto no encontrado.');
-    for (const k of ['price', 'member_price', 'stock', 'vintage']) if (b[k] != null) { const n = Number(b[k]); if (!Number.isInteger(n) || n < 0) err(400, 'Valor inválido.'); p[k] = n; }
-    if (b.active != null) p.active = b.active ? 1 : 0;
-    if (b.members_only != null) p.members_only = b.members_only ? 1 : 0;
-    if (b.presale_until !== undefined) p.presale_until = b.presale_until ? iso(b.presale_until) : null;
-    return { ok: true };
+    Object.assign(p, productFields(b)); return { ok: true };
+  }],
+  ['POST', /^\/admin\/products$/, (b) => {
+    needAdmin();
+    const n = productFields({ variety: 'frutado', format: 'botella', volume_ml: 720, vintage: new Date().getFullYear(), tagline: '', description: '',
+      tasting_notes: '', pairing: '', abv: 15, stock: 0, accent: 'gold', active: false, members_only: false, sort: 50, name_jp: '', ...b });
+    if (!n.name) err(400, 'Falta el nombre.');
+    if (n.price == null || n.member_price == null) err(400, 'Faltan los precios.');
+    const base = n.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'producto';
+    let slug = `${base}-${n.volume_ml}`, i = 2;
+    while (DB.products.some(p => p.slug === slug)) slug = `${base}-${n.volume_ml}-${i++}`;
+    const p = { id: ++DB.seq, slug, photo: null, presale_until: null, ...n };
+    DB.products.push(p); return { id: p.id, slug };
   }],
   ['POST', /^\/admin\/products\/(\d+)\/photo$/, (b, m) => {
     needAdmin();
@@ -286,18 +335,34 @@ const routes = [
     needAdmin();
     return { members: DB.memberships.map(m => { const u = DB.users.find(x => x.id === m.user_id); return { name: u?.name, email: u?.email, number: m.member_number, status: m.status, periodEnd: m.current_period_end, cancelAtEnd: m.cancel_at_period_end }; }) };
   }],
-  ['POST', /^\/admin\/announcements$/, (b) => {
+  ['GET', /^\/admin\/announcements$/, () => { needAdmin(); return { announcements: [...DB.announcements].sort((a, c) => c.id - a.id) }; }],
+  ['POST', /^\/admin\/announcements$/, (b) => { needAdmin(); DB.announcements.push({ id: ++DB.seq, ...annFields(b), createdAt: iso(now()) }); return { ok: true }; }],
+  ['PATCH', /^\/admin\/announcements\/(\d+)$/, (b, m) => { needAdmin(); const a = DB.announcements.find(x => x.id === Number(m[1])) || err(404, 'Anuncio no encontrado.'); Object.assign(a, annFields(b)); return { ok: true }; }],
+  ['DELETE', /^\/admin\/announcements\/(\d+)$/, (b, m) => { needAdmin(); DB.announcements = DB.announcements.filter(x => x.id !== Number(m[1])); return { ok: true }; }],
+
+  ['GET', /^\/admin\/events$/, () => {
     needAdmin();
-    DB.announcements.push({ id: ++DB.seq, kind: ['anuncio', 'premio', 'lanzamiento'].includes(b.kind) ? b.kind : 'anuncio', title: s(b.title, 3, 140, 'Título'),
-      titleJp: s(b.titleJp ?? '', 0, 60, 'Título JP') || null, body: s(b.body, 3, 2000, 'Texto'), public: b.public ? 1 : 0, createdAt: iso(now()) });
-    return { ok: true };
+    return { events: [...DB.events].sort((a, c) => c.startsAt.localeCompare(a.startsAt)).map(e => {
+      const attendees = DB.rsvps.filter(r => r.event_id === e.id).map(r => { const u = DB.users.find(x => x.id === r.user_id); return { name: u?.name || 'Invitado', email: u?.email || '—', guests: r.guests }; });
+      return { ...e, active: e.active !== false, attendees, taken: attendees.reduce((n, a) => n + 1 + a.guests, 0) };
+    }) };
   }],
-  ['POST', /^\/admin\/events$/, (b) => {
+  ['POST', /^\/admin\/events$/, (b) => { needAdmin(); DB.events.push({ id: ++DB.seq, ...evtFields(b) }); return { ok: true }; }],
+  ['PATCH', /^\/admin\/events\/(\d+)$/, (b, m) => { needAdmin(); const e = DB.events.find(x => x.id === Number(m[1])) || err(404, 'Evento no encontrado.'); Object.assign(e, evtFields(b)); return { ok: true }; }],
+  ['DELETE', /^\/admin\/events\/(\d+)$/, (b, m) => { needAdmin(); const id = Number(m[1]); DB.events = DB.events.filter(x => x.id !== id); DB.rsvps = DB.rsvps.filter(r => r.event_id !== id); return { ok: true }; }],
+
+  ['GET', /^\/admin\/alliances$/, () => { needAdmin(); return { alliances: [...DB.alliances].sort((a, c) => a.sort - c.sort || a.id - c.id) }; }],
+  ['POST', /^\/admin\/alliances$/, (b) => { needAdmin(); DB.alliances.push({ id: ++DB.seq, ...allyFields(b) }); return { ok: true }; }],
+  ['PATCH', /^\/admin\/alliances\/(\d+)$/, (b, m) => { needAdmin(); const a = DB.alliances.find(x => x.id === Number(m[1])) || err(404, 'No encontrado.'); Object.assign(a, allyFields(b)); return { ok: true }; }],
+  ['DELETE', /^\/admin\/alliances\/(\d+)$/, (b, m) => { needAdmin(); DB.alliances = DB.alliances.filter(x => x.id !== Number(m[1])); return { ok: true }; }],
+
+  ['GET', /^\/admin\/settings$/, () => { needAdmin(); return { settings: { ...SET() }, labels: { membership_price: 'Cuota mensual del Club', shipping_flat: 'Costo de envío', free_shipping_from: 'Envío sin cargo desde', max_reserva: 'Tope por socio en exclusivos' } }; }],
+  ['PATCH', /^\/admin\/settings$/, (b) => {
     needAdmin();
-    const d = new Date(b.startsAt); if (isNaN(d)) err(400, 'Fecha inválida.');
-    DB.events.push({ id: ++DB.seq, title: s(b.title, 3, 140, 'Título'), titleJp: s(b.titleJp ?? '', 0, 60, 'Título JP') || null, description: s(b.description, 3, 2000, 'Descripción'),
-      startsAt: d.toISOString(), location: s(b.location, 2, 140, 'Lugar'), capacity: Math.max(1, Math.trunc(Number(b.capacity)) || 1) });
-    return { ok: true };
+    for (const k of ['membership_price', 'shipping_flat', 'free_shipping_from', 'max_reserva']) if (b[k] !== undefined) {
+      const n = Number(b[k]); if (!Number.isInteger(n) || n < (k === 'max_reserva' ? 1 : 0)) err(400, 'Valor inválido.'); SET()[k] = n;
+    }
+    return { settings: { ...SET() } };
   }],
 ];
 

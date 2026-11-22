@@ -5,6 +5,7 @@ import crypto from 'node:crypto';
 import { requireAdmin } from '../auth.js';
 import { getOrder } from './shop.js';
 import { HttpError, int, str } from '../security.js';
+import { getSettings, setSettings, SETTINGS } from '../settings.js';
 
 const STATUSES = ['pagado', 'preparando', 'enviado', 'entregado', 'cancelado'];
 
@@ -51,23 +52,51 @@ export default function adminRoutes(db, { uploadsDir } = {}) {
 
   r.get('/products', (req, res) => res.json({ products: db.prepare('SELECT * FROM products ORDER BY sort,id').all().map(p => ({ ...p })) }));
 
+  // Ficha completa del producto: todo lo que se ve en la tienda es editable.
+  const PRODUCT_TEXT = { name: [2, 80, 'Nombre'], name_jp: [0, 40, 'Nombre en japonés'], tagline: [0, 200, 'Bajada'],
+    description: [0, 2000, 'Descripción'], tasting_notes: [0, 1000, 'Notas de cata'], pairing: [0, 500, 'Maridaje'],
+    ingredients: [0, 500, 'Ingredientes'], variety: [2, 40, 'Estilo'] };
+  const PRODUCT_INT = { price: [0, 1e9, 'Precio'], member_price: [0, 1e9, 'Precio socio'], stock: [0, 1e6, 'Stock'],
+    vintage: [2000, 2100, 'Cosecha'], volume_ml: [10, 10000, 'Volumen'], sort: [0, 1000, 'Orden'] };
+  function productFields(b, current = {}) {
+    const n = { ...current };
+    for (const [k, [min, max, field]] of Object.entries(PRODUCT_TEXT)) if (b[k] !== undefined) n[k] = str(b[k] ?? '', { min, max, field });
+    for (const [k, [min, max, field]] of Object.entries(PRODUCT_INT)) if (b[k] !== undefined && b[k] !== '') n[k] = int(b[k], { min, max, field });
+    if (b.abv !== undefined) { const a = Number(b.abv); if (!(a >= 0 && a <= 40)) throw new HttpError(400, 'Graduación inválida.'); n.abv = a; }
+    if (b.format !== undefined) { if (!['botella', 'tokkuri', 'pack'].includes(b.format)) throw new HttpError(400, 'Formato inválido.'); n.format = b.format; n.image = b.format === 'tokkuri' ? 'tokkuri' : 'botella'; }
+    if (b.accent !== undefined) n.accent = b.accent === 'red' ? 'red' : 'gold';
+    if (b.active !== undefined) n.active = b.active ? 1 : 0;
+    if (b.members_only !== undefined) n.members_only = b.members_only ? 1 : 0;
+    if (b.presale_until !== undefined) {
+      const d = b.presale_until ? new Date(b.presale_until) : null;
+      if (d && isNaN(d)) throw new HttpError(400, 'Fecha de preventa inválida.');
+      n.presale_until = d ? d.toISOString() : null;
+    }
+    return n;
+  }
+  const COLS = ['name', 'name_jp', 'variety', 'format', 'volume_ml', 'vintage', 'tagline', 'description', 'tasting_notes', 'pairing', 'ingredients',
+    'abv', 'price', 'member_price', 'stock', 'members_only', 'presale_until', 'image', 'accent', 'active', 'sort'];
+
   r.patch('/products/:id', (req, res) => {
     const id = int(req.params.id, { min: 1 });
-    const b = req.body;
     const p = db.prepare('SELECT * FROM products WHERE id=?').get(id);
     if (!p) throw new HttpError(404, 'Producto no encontrado.');
-    const next = {
-      price: b.price != null ? int(b.price, { min: 0, field: 'Precio' }) : p.price,
-      member_price: b.member_price != null ? int(b.member_price, { min: 0, field: 'Precio socio' }) : p.member_price,
-      stock: b.stock != null ? int(b.stock, { min: 0, field: 'Stock' }) : p.stock,
-      active: b.active != null ? (b.active ? 1 : 0) : p.active,
-      members_only: b.members_only != null ? (b.members_only ? 1 : 0) : p.members_only,
-      vintage: b.vintage != null ? int(b.vintage, { min: 2000, max: 2100, field: 'Cosecha' }) : p.vintage,
-      presale_until: b.presale_until !== undefined ? (b.presale_until ? new Date(b.presale_until).toISOString() : null) : p.presale_until,
-    };
-    db.prepare('UPDATE products SET price=?,member_price=?,stock=?,active=?,members_only=?,vintage=?,presale_until=? WHERE id=?')
-      .run(next.price, next.member_price, next.stock, next.active, next.members_only, next.vintage, next.presale_until, id);
+    const n = productFields(req.body, p);
+    db.prepare(`UPDATE products SET ${COLS.map(c => `${c}=?`).join(',')} WHERE id=?`).run(...COLS.map(c => n[c] ?? null), id);
     res.json({ ok: true });
+  });
+
+  r.post('/products', (req, res) => {
+    const n = productFields({ variety: 'frutado', format: 'botella', volume_ml: 720, vintage: new Date().getFullYear(), tagline: '', description: '',
+      tasting_notes: '', pairing: '', abv: 15, stock: 0, accent: 'gold', active: 0, members_only: 0, sort: 50, name_jp: '', ...req.body });
+    if (!n.name) throw new HttpError(400, 'Falta el nombre.');
+    if (n.price == null || n.member_price == null) throw new HttpError(400, 'Faltan los precios.');
+    const base = n.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'producto';
+    let slug = `${base}-${n.volume_ml}`, i = 2;
+    while (db.prepare('SELECT 1 FROM products WHERE slug=?').get(slug)) slug = `${base}-${n.volume_ml}-${i++}`;
+    const { lastInsertRowid } = db.prepare(`INSERT INTO products (slug,${COLS.join(',')}) VALUES (?,${COLS.map(() => '?').join(',')})`)
+      .run(slug, ...COLS.map(c => n[c] ?? null));
+    res.status(201).json({ id: Number(lastInsertRowid), slug });
   });
 
   // Foto real del producto: recibe una imagen en data URL (jpg/png/webp, hasta 5 MB).
@@ -103,22 +132,87 @@ export default function adminRoutes(db, { uploadsDir } = {}) {
       FROM memberships m JOIN users u ON u.id=m.user_id ORDER BY m.id DESC`).all().map(x => ({ ...x })) });
   });
 
+  // ---------- Anuncios y premios ----------
+  const annFields = b => [
+    ['anuncio', 'premio', 'lanzamiento'].includes(b.kind) ? b.kind : 'anuncio',
+    str(b.title, { min: 3, max: 140, field: 'Título' }), str(b.titleJp ?? '', { max: 60, field: 'Título JP' }) || null,
+    str(b.body, { min: 3, max: 2000, field: 'Texto' }), b.public ? 1 : 0];
+  r.get('/announcements', (req, res) => res.json({ announcements: db.prepare('SELECT id,kind,title,title_jp AS titleJp,body,public,created_at AS createdAt FROM announcements ORDER BY id DESC').all().map(x => ({ ...x })) }));
   r.post('/announcements', (req, res) => {
-    const kind = ['anuncio', 'premio', 'lanzamiento'].includes(req.body.kind) ? req.body.kind : 'anuncio';
-    db.prepare('INSERT INTO announcements (kind,title,title_jp,body,public) VALUES (?,?,?,?,?)').run(
-      kind, str(req.body.title, { min: 3, max: 140, field: 'Título' }), str(req.body.titleJp ?? '', { max: 60, field: 'Título JP' }) || null,
-      str(req.body.body, { min: 3, max: 2000, field: 'Texto' }), req.body.public ? 1 : 0);
+    db.prepare('INSERT INTO announcements (kind,title,title_jp,body,public) VALUES (?,?,?,?,?)').run(...annFields(req.body));
     res.status(201).json({ ok: true });
   });
+  r.patch('/announcements/:id', (req, res) => {
+    const r2 = db.prepare('UPDATE announcements SET kind=?,title=?,title_jp=?,body=?,public=? WHERE id=?').run(...annFields(req.body), int(req.params.id, { min: 1 }));
+    if (!r2.changes) throw new HttpError(404, 'Anuncio no encontrado.');
+    res.json({ ok: true });
+  });
+  r.delete('/announcements/:id', (req, res) => {
+    db.prepare('DELETE FROM announcements WHERE id=?').run(int(req.params.id, { min: 1 }));
+    res.json({ ok: true });
+  });
 
-  r.post('/events', (req, res) => {
-    const starts = new Date(req.body.startsAt);
+  // ---------- Degustaciones y eventos ----------
+  const evtFields = b => {
+    const starts = new Date(b.startsAt);
     if (isNaN(starts)) throw new HttpError(400, 'Fecha inválida.');
-    db.prepare('INSERT INTO events (title,title_jp,description,starts_at,location,capacity) VALUES (?,?,?,?,?,?)').run(
-      str(req.body.title, { min: 3, max: 140, field: 'Título' }), str(req.body.titleJp ?? '', { max: 60 }) || null,
-      str(req.body.description, { min: 3, max: 2000, field: 'Descripción' }), starts.toISOString(),
-      str(req.body.location, { min: 2, max: 140, field: 'Lugar' }), int(req.body.capacity, { min: 1, max: 500, field: 'Cupo' }));
+    return [str(b.title, { min: 3, max: 140, field: 'Título' }), str(b.titleJp ?? '', { max: 60, field: 'Título JP' }) || null,
+      str(b.description, { min: 3, max: 2000, field: 'Descripción' }), starts.toISOString(),
+      str(b.location, { min: 2, max: 140, field: 'Lugar' }), int(b.capacity, { min: 1, max: 500, field: 'Cupo' }), b.active === false ? 0 : 1];
+  };
+  r.get('/events', (req, res) => {
+    const events = db.prepare('SELECT * FROM events ORDER BY starts_at DESC').all();
+    const att = db.prepare('SELECT u.name, u.email, r.guests FROM event_rsvps r JOIN users u ON u.id=r.user_id WHERE r.event_id=? ORDER BY r.created_at');
+    res.json({ events: events.map(e => {
+      const attendees = att.all(e.id).map(a => ({ ...a }));
+      return { id: e.id, title: e.title, titleJp: e.title_jp, description: e.description, startsAt: e.starts_at, location: e.location,
+        capacity: e.capacity, active: !!e.active, attendees, taken: attendees.reduce((n, a) => n + 1 + a.guests, 0) };
+    }) });
+  });
+  r.post('/events', (req, res) => {
+    db.prepare('INSERT INTO events (title,title_jp,description,starts_at,location,capacity,active) VALUES (?,?,?,?,?,?,?)').run(...evtFields(req.body));
     res.status(201).json({ ok: true });
+  });
+  r.patch('/events/:id', (req, res) => {
+    const r2 = db.prepare('UPDATE events SET title=?,title_jp=?,description=?,starts_at=?,location=?,capacity=?,active=? WHERE id=?').run(...evtFields(req.body), int(req.params.id, { min: 1 }));
+    if (!r2.changes) throw new HttpError(404, 'Evento no encontrado.');
+    res.json({ ok: true });
+  });
+  r.delete('/events/:id', (req, res) => {
+    db.prepare('DELETE FROM events WHERE id=?').run(int(req.params.id, { min: 1 }));
+    res.json({ ok: true });
+  });
+
+  // ---------- Marcas, proveedores y alianzas ----------
+  const allyFields = b => {
+    const url = str(b.url ?? '', { max: 300, field: 'Sitio web' });
+    if (url && !/^https?:\/\//i.test(url)) throw new HttpError(400, 'El sitio web debe empezar con http:// o https://');
+    return [str(b.name, { min: 2, max: 120, field: 'Nombre' }), str(b.category ?? '', { max: 60, field: 'Tipo' }) || 'proveedor',
+      str(b.description ?? '', { max: 500, field: 'Descripción' }), url || null, b.sort === '' || b.sort == null ? 0 : int(b.sort, { min: 0, max: 1000, field: 'Orden' }),
+      b.active === false ? 0 : 1];
+  };
+  r.get('/alliances', (req, res) => res.json({ alliances: db.prepare('SELECT * FROM alliances ORDER BY sort,id').all().map(a => ({ ...a, active: !!a.active })) }));
+  r.post('/alliances', (req, res) => {
+    db.prepare('INSERT INTO alliances (name,category,description,url,sort,active) VALUES (?,?,?,?,?,?)').run(...allyFields(req.body));
+    res.status(201).json({ ok: true });
+  });
+  r.patch('/alliances/:id', (req, res) => {
+    const r2 = db.prepare('UPDATE alliances SET name=?,category=?,description=?,url=?,sort=?,active=? WHERE id=?').run(...allyFields(req.body), int(req.params.id, { min: 1 }));
+    if (!r2.changes) throw new HttpError(404, 'No encontrado.');
+    res.json({ ok: true });
+  });
+  r.delete('/alliances/:id', (req, res) => {
+    db.prepare('DELETE FROM alliances WHERE id=?').run(int(req.params.id, { min: 1 }));
+    res.json({ ok: true });
+  });
+
+  // ---------- Ajustes ----------
+  r.get('/settings', (req, res) => res.json({ settings: getSettings(db), labels: Object.fromEntries(Object.entries(SETTINGS).map(([k, v]) => [k, v.label])) }));
+  r.patch('/settings', (req, res) => {
+    const values = {};
+    for (const [k, s] of Object.entries(SETTINGS)) if (req.body[k] !== undefined) values[k] = int(req.body[k], { min: s.min, max: 1e9, field: s.label });
+    setSettings(db, values);
+    res.json({ settings: getSettings(db) });
   });
 
   return r;
