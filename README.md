@@ -18,6 +18,15 @@ npm test           # tests de la API (auth, precios, membresía, pedidos, admin)
 Usuario administrador inicial (cambialo con variables de entorno antes de publicar):
 `admin@komatsu.local` / `komatsu-admin`.
 
+## App para celulares (Bodega Komatsu)
+
+- **Android / Google Play:** proyecto en `android/` (ícono 小松, nombre *Bodega Komatsu*). Se compila solo en
+  GitHub (**Actions → App Android → Run workflow**). Pasos para publicar en `android/README.md`.
+- **iPhone:** la tienda se instala desde Safari con **Compartir → Agregar a inicio** (ícono 小松, nombre Komatsu).
+- La web es una app instalable (PWA): `public/manifest.webmanifest`, `public/sw.js`.
+- Variables del servidor para la app: `ANDROID_SHA256` (huellas de firma, separadas por coma) y
+  `ANDROID_PACKAGE` (por defecto `com.bodegakomatsu.app`), publicadas en `/.well-known/assetlinks.json`.
+
 ## Demo sin servidor
 
 `npm run build:demo` genera en `dist/demo/` una versión que funciona sola en el navegador

@@ -56,11 +56,13 @@ jobs:
           chmod +x gradlew
           HOST_ARG=""
           if [ -n "$HOST_INPUT" ]; then HOST_ARG="-PkomatsuHost=$HOST_INPUT"; fi
-          if [ "${{ steps.sign.outputs.signed }}" = "true" ]; then
-            ./gradlew --no-daemon $HOST_ARG assembleRelease bundleRelease
-          else
-            ./gradlew --no-daemon $HOST_ARG assembleDebug
-          fi
+          if [ "${{ steps.sign.outputs.signed }}" = "true" ]; then TASKS="assembleRelease bundleRelease"; else TASKS="assembleDebug"; fi
+          # Reintenta si el repositorio de descargas responde con errores pasajeros (429/5xx).
+          for i in 1 2 3; do
+            ./gradlew --no-daemon $HOST_ARG $TASKS && exit 0
+            echo "::warning::Intento $i falló; reintento en $((i*30)) s"; sleep $((i*30))
+          done
+          exit 1
 
       - name: Huella de la firma (para assetlinks)
         run: |
