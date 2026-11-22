@@ -66,7 +66,13 @@ export default async function account({ query }) {
         await api('/auth/logout', { method: 'POST' }); clearCart(); await refreshUser(); toast('Sesión cerrada · またね'); go('');
       });
       root.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', async () => {
-        if (b.dataset.act === 'cancel' && !confirm('¿Cancelar la membresía? Mantenés los beneficios hasta el fin del período pagado.')) return;
+        // Confirmación en dos pasos (sin diálogos del navegador)
+        if (b.dataset.act === 'cancel' && !b.dataset.armed) {
+          b.dataset.armed = '1';
+          b.textContent = 'Confirmar cancelación';
+          b.insertAdjacentHTML('afterend', '<p class="muted" style="font-size:13px">Mantenés los beneficios hasta el fin del período pagado.</p>');
+          return;
+        }
         try {
           await api('/membership/' + b.dataset.act, { method: 'POST' });
           await refreshUser();

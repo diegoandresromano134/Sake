@@ -18,6 +18,13 @@ npm test           # tests de la API (auth, precios, membresía, pedidos, admin)
 Usuario administrador inicial (cambialo con variables de entorno antes de publicar):
 `admin@komatsu.local` / `komatsu-admin`.
 
+## Demo sin servidor
+
+`npm run build:demo` genera en `dist/demo/` una versión que funciona sola en el navegador
+(sin servidor ni base de datos): la API se reemplaza por `demo/mock-api.js` y los datos
+quedan guardados sólo en ese navegador. Trae una barra para ver la tienda como socio
+(`socio@komatsu.demo` / `socio1234`), como administrador o como visitante, y un botón para reiniciarla.
+
 ## Estructura
 
 ```
