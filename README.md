@@ -10,7 +10,6 @@ membresía mensual del Club, área de socios, carrito, checkout y panel de admin
 ## Probarlo
 
 ```bash
-cd komatsu
 npm install
 npm start          # http://localhost:3000
 npm test           # tests de la API (auth, precios, membresía, pedidos, admin)
@@ -22,7 +21,7 @@ Usuario administrador inicial (cambialo con variables de entorno antes de public
 ## Estructura
 
 ```
-komatsu/
+sake/
 ├── server.js               arranque + renovación horaria de membresías
 ├── src/
 │   ├── app.js              Express: seguridad, rutas, SPA
