@@ -9,8 +9,8 @@ export class ApiError extends Error {
 const KEY = 'komatsu.demo.db.v1';
 const MEMBERSHIP = 20000, MAX_QTY = 12;
 const SET = () => DB.settings || (DB.settings = { membership_price: 20000, shipping_flat: 5000, free_shipping_from: 60000, max_reserva: 2 });
-const DEFAULT_TEXT = { bank_holder: 'Bodega Komatsu (ejemplo)', bank_name: 'Banco de ejemplo', bank_cbu: '0000000000000000000000', bank_alias: 'KOMATSU.SAKE.DEMO', bank_cuit: '30-00000000-0', payment_contact: 'pagos@komatsu.demo' };
-const TEXT = () => DB.text || (DB.text = { ...DEFAULT_TEXT });
+const DEFAULT_TEXT = { bank_holder: 'Bodega Komatsu (ejemplo)', bank_name: 'Banco de ejemplo', bank_cbu: '0000000000000000000000', bank_alias: 'KOMATSU.SAKE.DEMO', bank_cuit: '30-00000000-0', payment_contact: 'pagos@komatsu.demo', whatsapp_number: '5491100000000', whatsapp_message: 'Hola Komatsu, quería hacer una consulta.' };
+const TEXT = () => { DB.text ||= { ...DEFAULT_TEXT }; for (const k in DEFAULT_TEXT) DB.text[k] ??= DEFAULT_TEXT[k]; return DB.text; };
 const PAYSET = () => { const st = SET(); st.transfer_discount_pct ??= 5; st.transfer_expiry_hours ??= 48; return st; };
 const bank = () => { const t = TEXT(); return { holder: t.bank_holder, bank: t.bank_name, cbu: t.bank_cbu, alias: t.bank_alias, cuit: t.bank_cuit, contact: t.payment_contact }; };
 const METHODS = () => [
@@ -302,7 +302,8 @@ const routes = [
   ['GET', /^\/orders\/([\w-]+)$/, (b, m) => { expireOrders(); const u = needUser(); const o = DB.orders.find(x => x.code === m[1] && x.user_id === u.id) || err(404, 'Pedido no encontrado.'); return { order: orderView(o) }; }],
 
   ['GET', /^\/club\/plan$/, () => ({ monthlyPrice: SET().membership_price, benefits: BENEFITS })],
-  ['GET', /^\/settings$/, () => ({ membershipPrice: SET().membership_price, shippingFlat: SET().shipping_flat, freeShippingFrom: SET().free_shipping_from, maxReserva: SET().max_reserva, transferDiscountPct: PAYSET().transfer_discount_pct, transferExpiryHours: PAYSET().transfer_expiry_hours })],
+  ['GET', /^\/settings$/, () => ({ membershipPrice: SET().membership_price, shippingFlat: SET().shipping_flat, freeShippingFrom: SET().free_shipping_from, maxReserva: SET().max_reserva, transferDiscountPct: PAYSET().transfer_discount_pct, transferExpiryHours: PAYSET().transfer_expiry_hours,
+    whatsapp: String(TEXT().whatsapp_number || '').replace(/\D/g, '').length >= 8 ? { number: String(TEXT().whatsapp_number).replace(/\D/g, ''), message: TEXT().whatsapp_message || 'Hola Komatsu, quería hacer una consulta.' } : null })],
   ['GET', /^\/alliances$/, () => ({ alliances: [...DB.alliances].filter(a => a.active).sort((a, c) => a.sort - c.sort || a.id - c.id) })],
   ['GET', /^\/membership$/, () => {
     const u = needUser();
@@ -457,7 +458,7 @@ const routes = [
     return { ok: true };
   }],
   ['GET', /^\/admin\/settings$/, () => { needAdmin(); PAYSET(); return { settings: { ...SET() }, text: { ...TEXT() }, payments: { mercadopago: false, test: true },
-    textLabels: { bank_holder: 'Titular de la cuenta', bank_name: 'Banco', bank_cbu: 'CBU o CVU', bank_alias: 'Alias', bank_cuit: 'CUIT del titular', payment_contact: 'Contacto para enviar el comprobante (WhatsApp o email)' },
+    textLabels: { bank_holder: 'Titular de la cuenta', bank_name: 'Banco', bank_cbu: 'CBU o CVU', bank_alias: 'Alias', bank_cuit: 'CUIT del titular', payment_contact: 'Contacto para enviar el comprobante (WhatsApp o email)', whatsapp_number: 'Número de WhatsApp (con código de país, ej. 5491155550000)', whatsapp_message: 'Mensaje inicial' },
     labels: { membership_price: 'Cuota mensual del Club', shipping_flat: 'Costo de envío', free_shipping_from: 'Envío sin cargo desde', max_reserva: 'Tope por socio en exclusivos', transfer_discount_pct: 'Descuento por transferencia (%)', transfer_expiry_hours: 'Horas de reserva para pagar por transferencia' } }; }],
   ['PATCH', /^\/admin\/settings$/, (b) => {
     needAdmin();

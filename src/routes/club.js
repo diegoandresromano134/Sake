@@ -3,7 +3,7 @@ import { requireAuth, requireMember } from '../auth.js';
 import { getMembership, publicMembership, startMembershipPayment, setCancel } from '../membership.js';
 import { paymentMethods, createCheckout, bankInfo } from '../payments.js';
 import { baseUrl } from './shop.js';
-import { getSettings, publicSettings } from '../settings.js';
+import { getSettings, publicSettings, getTextSettings } from '../settings.js';
 import { HttpError, int } from '../security.js';
 
 export default function clubRoutes(db) {
@@ -51,7 +51,11 @@ export default function clubRoutes(db) {
   r.post('/membership/cancel', requireAuth, (req, res) => res.json({ membership: publicMembership(setCancel(db, req.user.id, true)) }));
   r.post('/membership/resume', requireAuth, (req, res) => res.json({ membership: publicMembership(setCancel(db, req.user.id, false)) }));
 
-  r.get('/settings', (req, res) => res.json(publicSettings(getSettings(db))));
+  r.get('/settings', (req, res) => {
+    const t = getTextSettings(db);
+    const number = String(t.whatsapp_number || '').replace(/\D/g, '');
+    res.json({ ...publicSettings(getSettings(db)), whatsapp: number.length >= 8 ? { number, message: t.whatsapp_message || 'Hola Komatsu, quería hacer una consulta.' } : null });
+  });
   r.get('/alliances', (req, res) => res.json({ alliances: db.prepare('SELECT id,name,category,description,url FROM alliances WHERE active=1 ORDER BY sort,id').all().map(a => ({ ...a })) }));
 
   // Novedades públicas (para la home)

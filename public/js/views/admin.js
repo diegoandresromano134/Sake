@@ -232,9 +232,14 @@ export default async function admin({ query }) {
           ${payments.test ? '<p class="muted" style="font-size:13px;margin:0">Modo desarrollo: también se ofrece «Pago de prueba». No aparece en la tienda publicada.</p>' : ''}
           <h3 style="margin-top:8px">Transferencia bancaria</h3>
           <p class="muted" style="font-size:13px;margin:0">Con alias o CBU cargado, la transferencia aparece en el checkout.</p>
-          ${Object.keys(textLabels).map(k => field({ name: 'text.' + k, label: textLabels[k] }, text[k], 'set')).join('')}
+          ${Object.keys(textLabels).filter(k => !k.startsWith('whatsapp_')).map(k => field({ name: 'text.' + k, label: textLabels[k] }, text[k], 'set')).join('')}
           ${['transfer_discount_pct', 'transfer_expiry_hours'].map(k => field({ name: k, label: labels[k], type: 'number', min: 0 }, settings[k], 'set')).join('')}
         </div>
+      </div>
+      <div class="panel form" style="max-width:720px"><h3>Botón de WhatsApp</h3>
+        <p class="muted" style="font-size:13px;margin:0">Aparece flotando en todas las páginas. Dejá el número vacío para ocultarlo.</p>
+        ${field({ name: 'text.whatsapp_number', label: textLabels.whatsapp_number, placeholder: '5491155550000' }, text.whatsapp_number, 'set')}
+        ${field({ name: 'text.whatsapp_message', label: textLabels.whatsapp_message, placeholder: 'Hola Komatsu, quería hacer una consulta.' }, text.whatsapp_message, 'set')}
       </div>
       <button class="btn gold" type="submit" style="align-self:flex-start">Guardar ajustes</button></form>`;
   }
@@ -288,7 +293,7 @@ export default async function admin({ query }) {
         e.preventDefault();
         const body = { text: {} };
         for (const [k, v] of new FormData(e.target)) { if (k.startsWith('text.')) body.text[k.slice(5)] = v; else body[k] = Number(v); }
-        try { await api('/admin/settings', { method: 'PATCH', body }); toast('Ajustes guardados'); }
+        try { await api('/admin/settings', { method: 'PATCH', body }); toast('Ajustes guardados'); window.dispatchEvent(new Event('komatsu:settings')); }
         catch (ex) { toast(ex.message, 'error'); }
       });
       root.querySelector('#new-edition')?.addEventListener('submit', async e => {

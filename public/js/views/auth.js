@@ -56,7 +56,8 @@ export async function registerView({ query }) {
         <p class="error-msg" hidden></p>
         <button class="btn gold block" type="submit">Crear cuenta</button>
       </form>
-      <p class="muted" style="text-align:center;margin-top:18px">¿Ya tenés cuenta? <a class="gold-text" href="#/login?next=${encodeURIComponent(next)}">Ingresá</a></p>
+      <p class="muted" style="text-align:center;margin-top:18px;font-size:14px">La cuenta es gratis y sirve para comprar. El Club Member es opcional y se suma después.</p>
+      <p class="muted" style="text-align:center;margin-top:8px">¿Ya tenés cuenta? <a class="gold-text" href="#/login?next=${encodeURIComponent(next)}">Ingresá</a></p>
     </div></section>`,
     mount: root => wire(root, '/auth/register', next),
   };

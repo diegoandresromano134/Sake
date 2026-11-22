@@ -26,6 +26,7 @@ export function setSettings(db, values) {
 export const TEXT_SETTINGS = {
   bank_holder: 'Titular de la cuenta', bank_name: 'Banco', bank_cbu: 'CBU o CVU', bank_alias: 'Alias',
   bank_cuit: 'CUIT del titular', payment_contact: 'Contacto para enviar el comprobante (WhatsApp o email)',
+  whatsapp_number: 'Número de WhatsApp (con código de país, ej. 5491155550000)', whatsapp_message: 'Mensaje inicial',
 };
 export function getTextSettings(db) {
   const rows = Object.fromEntries(db.prepare('SELECT key, value FROM settings').all().map(r => [r.key, r.value]));

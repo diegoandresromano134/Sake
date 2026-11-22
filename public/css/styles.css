@@ -384,3 +384,31 @@ dialog.age-gate::backdrop { background: rgba(0,0,0,.92); }
 .bank-val { font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace; word-break: break-all; }
 .status.pendiente_pago { color: #F0C674; border-color: #8C7535; }
 @media (max-width: 480px) { .bank-row { grid-template-columns: 1fr auto; } .bank-row .label { grid-column: 1 / -1; } }
+
+/* ---------- Ingresar y franja de cuenta ---------- */
+.header-actions { align-items: center; }
+.login-btn { text-decoration: none; font-size: 11px; letter-spacing: .22em; text-transform: uppercase; border: 1px solid var(--gold-soft); color: var(--gold); padding: 8px 12px; margin-right: 4px; white-space: nowrap; }
+.login-btn:hover { background: var(--gold); color: var(--black); }
+@media (max-width: 420px) { .login-btn { padding: 6px 8px; letter-spacing: .12em; font-size: 10px; } .header-actions .icon-btn { width: 38px; } }
+.account-band { border-bottom: 1px solid var(--line); background: linear-gradient(90deg, rgba(212,175,55,.08), transparent 70%); }
+.account-band-inner { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; padding-block: 28px; }
+.account-band-inner > div:first-child { min-width: 0; flex: 1 1 320px; }
+
+/* ---------- Botón flotante de WhatsApp (negro y dorado) ---------- */
+.wa-float {
+  position: fixed; right: calc(20px + env(safe-area-inset-right, 0px)); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); z-index: 45;
+  width: 60px; height: 60px; border-radius: 50%; display: grid; place-items: center; text-decoration: none;
+  background: #0A0A0A; border: 1.5px solid var(--gold); box-shadow: 0 8px 24px rgba(0,0,0,.6), 0 0 0 0 rgba(212,175,55,.45);
+  animation: wa-pulse 3s ease-out infinite; transition: transform .2s;
+}
+.wa-float:hover { transform: translateY(-3px); }
+.wa-float svg { width: 32px; height: 32px; }
+.wa-float .wa-bubble { fill: none; stroke: var(--gold); stroke-width: 1.8; stroke-linejoin: round; }
+.wa-float .wa-phone { fill: var(--gold); }
+.wa-tip { position: absolute; right: 72px; white-space: nowrap; background: var(--carbon-2); border: 1px solid var(--gold-soft); color: var(--gold-pale);
+  font-size: 12px; letter-spacing: .14em; text-transform: uppercase; padding: 6px 10px; opacity: 0; transform: translateX(6px); transition: opacity .2s, transform .2s; pointer-events: none; }
+.wa-float:hover .wa-tip, .wa-float:focus-visible .wa-tip { opacity: 1; transform: none; }
+@keyframes wa-pulse { 0% { box-shadow: 0 8px 24px rgba(0,0,0,.6), 0 0 0 0 rgba(212,175,55,.45); } 70%, 100% { box-shadow: 0 8px 24px rgba(0,0,0,.6), 0 0 0 14px rgba(212,175,55,0); } }
+@media (prefers-reduced-motion: reduce) { .wa-float { animation: none; } }
+.drawer:not([hidden]) ~ .wa-float { display: none; }
+@media (max-width: 420px) { .brand-lat { display: none; } .brand-jp { font-size: 26px; } }

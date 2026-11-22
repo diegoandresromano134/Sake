@@ -1,6 +1,6 @@
 import { api } from '../api.js';
 import { esc, eyebrow, productArt, priceBlock, flags, formatLabel, dateFmt } from '../ui.js';
-import { isMember } from '../store.js';
+import { isMember, state } from '../store.js';
 
 export function productCard(p, member) {
   return `<a class="card" href="#/producto/${esc(p.slug)}">
@@ -34,6 +34,11 @@ export default async function home() {
         <div class="hero-art"><img src="/img/botella-720.jpg" alt="Botella de Sake Komatsu Junmai, negro mate con etiqueta dorada" width="1312" height="865"></div>
       </div>
     </section>
+    ${state.user ? '' : `<section class="account-band"><div class="container account-band-inner">
+      <div><p class="eyebrow" style="margin:0 0 6px"><span>Tu cuenta</span><span class="jp">会員登録</span></p>
+        <p style="margin:0">Creá tu cuenta gratis para comprar, seguir tus pedidos y registrar tus botellas numeradas.</p></div>
+      <div class="row"><a class="btn gold" href="#/registro">Crear cuenta</a><a class="btn" href="#/login">Ingresar</a></div>
+    </div></section>`}
 
     <section class="section"><div class="container">
       <div class="grid-3">

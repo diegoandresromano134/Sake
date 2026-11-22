@@ -1,6 +1,7 @@
 // Router SPA por hash + shell (menú, carrito, puerta de edad).
 import { state, onChange, refreshUser, cartCount, isAdmin } from './store.js';
 import { esc } from './ui.js';
+import { api } from './api.js';
 import home from './views/home.js';
 import bodega from './views/bodega.js';
 import { shopView, memberShopView, productView } from './views/shop.js';
@@ -91,6 +92,18 @@ function paintHeader() {
   document.querySelector('.member-dot').hidden = !state.user?.member;
   document.getElementById('drawer-account').textContent = state.user ? `Mi cuenta · ${state.user.name.split(' ')[0]}` : 'Ingresar / Registrarse';
   document.getElementById('drawer-admin').hidden = !isAdmin();
+  document.getElementById('login-link').hidden = !!state.user;
+}
+
+// Botón flotante de WhatsApp: número y mensaje se configuran desde el panel.
+async function setupWhatsApp() {
+  try {
+    const { whatsapp } = await api('/settings');
+    const a = document.getElementById('wa-float');
+    if (!whatsapp) { a.hidden = true; return; }
+    a.href = `https://wa.me/${whatsapp.number}?text=${encodeURIComponent(whatsapp.message)}`;
+    a.hidden = false;
+  } catch { /* sin conexión: no se muestra */ }
 }
 onChange(paintHeader);
 
@@ -106,6 +119,7 @@ function ageGate() {
 }
 
 window.addEventListener('hashchange', render);
+window.addEventListener('komatsu:settings', () => setupWhatsApp());
 // App instalable (Android / iPhone): registra el service worker.
 if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('/sw.js').catch(() => {});
 (async () => {
@@ -113,4 +127,5 @@ if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.se
   paintHeader();
   await refreshUser();
   render();
+  setupWhatsApp();
 })();
