@@ -1,8 +1,10 @@
 # Compila la app de Android "Bodega Komatsu".
-# Se ejecuta a mano desde la pestaña Actions (botón "Run workflow") o cuando cambia la carpeta android/.
-# Resultado (en "Artifacts" de cada ejecución):
-#   - bodega-komatsu-apk: APK para instalar y probar en un celular.
-#   - bodega-komatsu-aab: paquete .aab firmado para subir a Google Play (si están cargados los secretos de firma).
+# Se ejecuta a mano desde la pestaña Actions (botón "Run workflow") o cuando cambia la app.
+# Resultados:
+#   - APK DEMO para instalar en el celular, publicado en Releases ("demo"):
+#       https://github.com/<usuario>/<repo>/releases/download/demo/bodega-komatsu-demo.apk
+#   - bodega-komatsu-apk (Artifacts): APKs de prueba.
+#   - bodega-komatsu-aab (Artifacts): paquete .aab firmado para Google Play (si están los secretos de firma).
 name: App Android
 
 on:
@@ -14,17 +16,26 @@ on:
         default: ''
   push:
     branches: [main]
-    paths: ['android/**', '.github/workflows/android.yml']
+    paths: ['android/**', 'public/**', 'demo/**', '.github/workflows/android.yml']
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    defaults:
-      run:
-        working-directory: android
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Empaquetar la demo dentro de la app
+        run: |
+          npm ci
+          node demo/build.mjs android/app/src/demo/assets/demo --standalone
 
       - uses: actions/setup-java@v4
         with:
@@ -44,10 +55,11 @@ jobs:
             echo "signed=true" >> "$GITHUB_OUTPUT"
           else
             echo "signed=false" >> "$GITHUB_OUTPUT"
-            echo "::warning::Sin secretos de firma: se genera sólo el APK de prueba. Ver android/README.md"
+            echo "::warning::Sin secretos de firma: se generan sólo APKs de prueba. Ver android/README.md"
           fi
 
       - name: Compilar
+        working-directory: android
         env:
           KOMATSU_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KOMATSU_KEY_ALIAS: komatsu
@@ -56,7 +68,11 @@ jobs:
           chmod +x gradlew
           HOST_ARG=""
           if [ -n "$HOST_INPUT" ]; then HOST_ARG="-PkomatsuHost=$HOST_INPUT"; fi
-          if [ "${{ steps.sign.outputs.signed }}" = "true" ]; then TASKS="assembleRelease bundleRelease"; else TASKS="assembleDebug"; fi
+          if [ "${{ steps.sign.outputs.signed }}" = "true" ]; then
+            TASKS="assembleTiendaRelease bundleTiendaRelease assembleDemoRelease"
+          else
+            TASKS="assembleTiendaDebug assembleDemoDebug"
+          fi
           # Reintenta si el repositorio de descargas responde con errores pasajeros (429/5xx).
           for i in 1 2 3; do
             ./gradlew --no-daemon $HOST_ARG $TASKS && exit 0
@@ -64,24 +80,37 @@ jobs:
           done
           exit 1
 
-      - name: Huella de la firma (para assetlinks)
+      - name: Publicar el APK demo (Releases)
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          APK=$(ls android/app/build/outputs/apk/demo/*/*.apk | head -1)
+          cp "$APK" bodega-komatsu-demo.apk
+          gh release view demo >/dev/null 2>&1 || gh release create demo --title "Bodega Komatsu — demo para Android" \
+            --notes "App de prueba con la tienda adentro (funciona sin servidor). Descargá bodega-komatsu-demo.apk desde el celular e instalalo." --prerelease
+          gh release upload demo bodega-komatsu-demo.apk --clobber
           {
             echo "## Bodega Komatsu"
+            echo "APK demo: https://github.com/${{ github.repository }}/releases/download/demo/bodega-komatsu-demo.apk"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Huella de la firma (para assetlinks)
+        env:
+          KOMATSU_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          {
             if [ "${{ steps.sign.outputs.signed }}" = "true" ]; then
               echo "Firma de subida (upload key) — SHA-256:"
               echo '```'
               keytool -list -v -keystore "$KOMATSU_KEYSTORE_FILE" -storepass "$KOMATSU_KEYSTORE_PASSWORD" -alias komatsu | grep 'SHA256:' | sed 's/.*SHA256: //'
               echo '```'
             else
-              echo "APK de prueba firmado con la llave de depuración — SHA-256:"
+              echo "APKs de prueba firmados con la llave de depuración — SHA-256:"
               echo '```'
               keytool -list -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey | grep 'SHA256:' | sed 's/.*SHA256: //'
               echo '```'
             fi
           } >> "$GITHUB_STEP_SUMMARY"
-        env:
-          KOMATSU_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
 
       - uses: actions/upload-artifact@v4
         with:
@@ -93,5 +122,5 @@ jobs:
         if: steps.sign.outputs.signed == 'true'
         with:
           name: bodega-komatsu-aab
-          path: android/app/build/outputs/bundle/release/*.aab
+          path: android/app/build/outputs/bundle/tiendaRelease/*.aab
           if-no-files-found: error

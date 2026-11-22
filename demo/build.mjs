@@ -8,7 +8,9 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const out = path.resolve(process.argv[2] || path.join(root, 'dist', 'demo'));
+const args = process.argv.slice(2);
+const standalone = args.includes('--standalone'); // documento HTML completo (app Android demo)
+const out = path.resolve(args.find(a => !a.startsWith('--')) || path.join(root, 'dist', 'demo'));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'komatsu-demo-'));
 
 fs.cpSync(path.join(root, 'public', 'js'), tmp, { recursive: true });
@@ -62,7 +64,9 @@ ${bodyInner}
 
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(path.join(out, 'img'), { recursive: true });
-fs.writeFileSync(path.join(out, 'index.html'), page);
+fs.writeFileSync(path.join(out, 'index.html'), standalone
+  ? `<!doctype html>\n<html lang="es">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n<meta name="theme-color" content="#0A0A0A">\n</head>\n<body>\n${page}</body>\n</html>\n`
+  : page);
 for (const f of fs.readdirSync(path.join(root, 'public', 'img'))) fs.copyFileSync(path.join(root, 'public', 'img', f), path.join(out, 'img', f));
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`Demo generada en ${out}`);
