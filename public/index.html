@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Komatsu · Sake Junmai Argentino</title>
+<meta name="description" content="Sake Komatsu 小松 — Sake Junmai argentino, artesanal y sin TACC. Shop online y Club Member.">
+<meta name="theme-color" content="#0A0A0A">
+<link rel="icon" href="/img/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600&family=Shippori+Mincho:wght@500;700&display=swap">
+<link rel="stylesheet" href="/css/styles.css">
+<script type="module" src="/js/app.js"></script>
+</head>
+<body>
+<a class="skip" href="#main">Saltar al contenido</a>
+
+<header class="site-header">
+  <button class="icon-btn" id="menu-btn" aria-label="Abrir menú" aria-expanded="false" aria-controls="drawer">
+    <span class="burger"><i></i><i></i><i></i></span>
+  </button>
+  <a href="#/" class="brand" aria-label="Komatsu, inicio">
+    <span class="brand-jp">小松</span>
+    <span class="brand-lat">KOMATSU</span>
+  </a>
+  <div class="header-actions">
+    <a href="#/cuenta" class="icon-btn" id="account-link" aria-label="Mi cuenta">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>
+      <span class="member-dot" hidden></span>
+    </a>
+    <a href="#/carrito" class="icon-btn" aria-label="Carrito">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h14l-1.2 12H6.2z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></svg>
+      <span class="cart-count" id="cart-count" hidden>0</span>
+    </a>
+  </div>
+</header>
+
+<div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+<nav class="drawer" id="drawer" aria-label="Menú principal" hidden>
+  <button class="icon-btn drawer-close" id="drawer-close" aria-label="Cerrar menú"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <div class="drawer-inner">
+    <details open>
+      <summary><span>La Bodega</span><span class="jp">蔵</span></summary>
+      <a href="#/bodega">Quiénes somos</a>
+      <a href="#/bodega/historia">Cómo nacimos</a>
+      <a href="#/bodega/filosofia">Filosofía Shokunin</a>
+      <a href="#/bodega/materias-primas">Materias primas</a>
+      <a href="#/bodega/recorrido">Recorrido 360°</a>
+      <a href="#/bodega/alianzas">Marcas y alianzas</a>
+    </details>
+    <details open>
+      <summary><span>Shop</span><span class="jp">販売</span></summary>
+      <a href="#/shop">Catálogo</a>
+      <a href="#/shop?formato=botella">Botellas 720 ml</a>
+      <a href="#/shop?formato=tokkuri">Tokkuri 330 ml</a>
+      <a href="#/shop?formato=pack">Pack dúo</a>
+    </details>
+    <details open>
+      <summary><span>Club Member</span><span class="jp">会員</span></summary>
+      <a href="#/club">El Club</a>
+      <a href="#/club/shop">Member Shop</a>
+      <a href="#/club/socios">Área de socios</a>
+    </details>
+    <div class="drawer-foot">
+      <a href="#/cuenta" id="drawer-account">Mi cuenta</a>
+      <a href="#/admin" id="drawer-admin" hidden>Administración</a>
+    </div>
+  </div>
+</nav>
+
+<main id="main" tabindex="-1"></main>
+
+<footer class="site-footer">
+  <div class="footer-grid">
+    <div>
+      <div class="footer-brand"><span class="jp">小松</span> KOMATSU</div>
+      <p class="muted">Sake Junmai Argentino · 純米酒<br>Pequeño pino: longevidad, resistencia y constancia.</p>
+    </div>
+    <div>
+      <h4>Navegar</h4>
+      <a href="#/bodega">La Bodega</a><a href="#/shop">Shop</a><a href="#/club">Club Member</a>
+    </div>
+    <div>
+      <h4>Ayuda</h4>
+      <a href="#/cuenta">Mi cuenta</a><a href="#/legal">Envíos y condiciones</a>
+    </div>
+  </div>
+  <p class="legal-strip">Beber con moderación. Prohibida su venta a menores de 18 años. · Sin TACC · 小松酒造</p>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<dialog class="age-gate" id="age-gate">
+  <div class="age-inner">
+    <div class="hanko big" aria-hidden="true"><span>小</span><span>松</span></div>
+    <h2>¿Sos mayor de 18 años?</h2>
+    <p class="jp-sub">二十歳以上ですか</p>
+    <p class="muted">Para ingresar a Komatsu tenés que tener la edad legal para consumir alcohol.</p>
+    <div class="row center">
+      <button class="btn gold" id="age-yes">Sí, soy mayor</button>
+      <button class="btn ghost" id="age-no">No</button>
+    </div>
+  </div>
+</dialog>
+</body>
+</html>
