@@ -21,6 +21,11 @@ on:
 permissions:
   contents: write
 
+# Una compilación a la vez (evita que dos publiquen el APK al mismo tiempo).
+concurrency:
+  group: android-app
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -86,9 +91,11 @@ jobs:
         run: |
           APK=$(ls android/app/build/outputs/apk/demo/*/*.apk | head -1)
           cp "$APK" bodega-komatsu-demo.apk
-          gh release view demo >/dev/null 2>&1 || gh release create demo --title "Bodega Komatsu — demo para Android" \
-            --notes "App de prueba con la tienda adentro (funciona sin servidor). Descargá bodega-komatsu-demo.apk desde el celular e instalalo." --prerelease
-          gh release upload demo bodega-komatsu-demo.apk --clobber
+          # Rehace la publicación "demo" con el APK nuevo (borra versiones anteriores, aunque haya duplicadas).
+          for i in 1 2 3 4 5; do gh release delete demo --yes --cleanup-tag >/dev/null 2>&1 || break; done
+          gh release create demo bodega-komatsu-demo.apk --target "$GITHUB_SHA" --prerelease \
+            --title "Bodega Komatsu — demo para Android" \
+            --notes "App de prueba con la tienda adentro (funciona sin servidor). Descargá bodega-komatsu-demo.apk desde el celular e instalalo."
           {
             echo "## Bodega Komatsu"
             echo "APK demo: https://github.com/${{ github.repository }}/releases/download/demo/bodega-komatsu-demo.apk"
