@@ -1,5 +1,5 @@
 import { api } from '../api.js';
-import { esc, eyebrow, money, toast, dateFmt, formData } from '../ui.js';
+import { esc, eyebrow, money, toast, dateFmt, formData, productArt, resizeImage } from '../ui.js';
 import { state, isAdmin } from '../store.js';
 import { needLogin, go } from '../app.js';
 import { orderDetail } from './cart.js';
@@ -23,8 +23,14 @@ export default async function admin({ query }) {
       : '<p class="muted">Todavía no hay pedidos.</p>';
   } else if (tab === 'productos') {
     const { products } = await api('/admin/products');
-    body = `<div class="table-wrap"><table><thead><tr><th>Producto</th><th>Cosecha</th><th class="num">Precio</th><th class="num">Precio socio</th><th class="num">Stock</th><th>Preventa socios hasta</th><th>Exclusivo</th><th>Activo</th><th></th></tr></thead><tbody>
+    body = `<p class="muted" style="margin-top:0">Fotos: ideal vertical (4:5), botella centrada sobre fondo oscuro. Se achican solas antes de subir.</p><div class="table-wrap"><table><thead><tr><th>Foto</th><th>Producto</th><th>Cosecha</th><th class="num">Precio</th><th class="num">Precio socio</th><th class="num">Stock</th><th>Preventa socios hasta</th><th>Exclusivo</th><th>Activo</th><th></th></tr></thead><tbody>
       ${products.map(p => `<tr data-id="${p.id}">
+        <td><div class="photo-cell">
+          <div class="photo-thumb">${productArt({ id: 'adm' + p.id, name: p.name, format: p.format, accent: p.accent, vintage: p.vintage, photo: p.photo })}</div>
+          <div class="photo-actions">
+            <label class="btn small file-btn">${p.photo ? 'Cambiar foto' : 'Subir foto'}<input type="file" accept="image/jpeg,image/png,image/webp" data-photo="${p.id}" aria-label="Foto de ${esc(p.name)}"></label>
+            ${p.photo ? `<button class="link" data-unphoto="${p.id}">Quitar foto</button>` : ''}
+          </div></div></td>
         <td>${esc(p.name)}<div class="muted" style="font-size:12px">${p.volume_ml} ml</div></td>
         <td><input name="vintage" type="number" value="${p.vintage}" style="width:80px"></td>
         <td class="num"><input name="price" type="number" min="0" value="${p.price}"></td>
@@ -89,6 +95,19 @@ export default async function admin({ query }) {
             members_only: v('members_only').checked, active: v('active').checked } });
           toast('Producto actualizado');
         } catch (ex) { toast(ex.message, 'error'); }
+      }));
+      root.querySelectorAll('[data-photo]').forEach(input => input.addEventListener('change', async () => {
+        const file = input.files[0]; if (!file) return;
+        const label = input.parentElement; label.firstChild.textContent = 'Subiendo…';
+        try {
+          const dataUrl = await resizeImage(file);
+          await api(`/admin/products/${input.dataset.photo}/photo`, { method: 'POST', body: { dataUrl } });
+          toast('Foto actualizada'); reload();
+        } catch (ex) { toast(ex.message, 'error'); label.firstChild.textContent = 'Subir foto'; }
+      }));
+      root.querySelectorAll('[data-unphoto]').forEach(b => b.addEventListener('click', async () => {
+        try { await api(`/admin/products/${b.dataset.unphoto}/photo`, { method: 'DELETE' }); toast('Foto quitada: vuelve el dibujo'); reload(); }
+        catch (ex) { toast(ex.message, 'error'); }
       }));
       const wire = (sel, path, map = d => d) => root.querySelector(sel)?.addEventListener('submit', async e => {
         e.preventDefault();

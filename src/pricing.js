@@ -7,7 +7,7 @@ export function productView(p, member) {
   return {
     id: p.id, slug: p.slug, name: p.name, nameJp: p.name_jp, variety: p.variety, format: p.format,
     volumeMl: p.volume_ml, vintage: p.vintage, tagline: p.tagline, description: p.description,
-    tastingNotes: p.tasting_notes, pairing: p.pairing, abv: p.abv, image: p.image, accent: p.accent,
+    tastingNotes: p.tasting_notes, pairing: p.pairing, abv: p.abv, image: p.image, photo: p.photo || null, accent: p.accent,
     price: p.price, memberPrice: p.member_price,
     finalPrice: member ? p.member_price : p.price,
     stock: p.stock, inStock: p.stock > 0, lowStock: p.stock > 0 && p.stock <= 10,

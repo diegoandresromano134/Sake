@@ -2,11 +2,15 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { openDb } from '../src/db.js';
 import { createApp } from '../src/app.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 let server, base, db;
+const uploadsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'km-up-'));
 before(async () => {
   db = openDb(':memory:');
-  server = createApp(db).listen(0);
+  server = createApp(db, { uploadsDir }).listen(0);
   await new Promise(r => server.once('listening', r));
   base = `http://127.0.0.1:${server.address().port}/api`;
 });
@@ -132,6 +136,23 @@ test('admin: resumen y cambio de estado con devolución de stock', async () => {
   assert.equal((await c('PATCH', `/admin/orders/${o.code}`, { status: 'cancelado' })).status, 200);
   assert.equal(stock(), s0 + 2);
   assert.equal((await client()('GET', '/admin/summary')).status, 403);
+});
+
+test('admin sube y quita la foto real de un producto', async () => {
+  const c = client();
+  await c('POST', '/auth/login', { email: 'admin@komatsu.local', password: 'komatsu-admin' });
+  const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  assert.equal((await c('POST', '/admin/products/1/photo', { dataUrl: 'data:text/html;base64,PGI+' })).status, 400);
+  const up = await c('POST', '/admin/products/1/photo', { dataUrl: png });
+  assert.equal(up.status, 201);
+  const file = await fetch(base.replace('/api', '') + up.body.photo);
+  assert.equal(file.status, 200);
+  const prod = (await client()('GET', '/products')).body.products.find(p => p.id === 1);
+  assert.equal(prod.photo, up.body.photo);
+  assert.equal((await c('DELETE', '/admin/products/1/photo')).status, 200);
+  assert.equal((await client()('GET', '/products')).body.products.find(p => p.id === 1).photo, null);
+  assert.equal(fs.readdirSync(uploadsDir).length, 0);
+  assert.equal((await client()('POST', '/admin/products/1/photo', { dataUrl: png })).status, 403);
 });
 
 test('escrituras sin JSON se rechazan (CSRF)', async () => {

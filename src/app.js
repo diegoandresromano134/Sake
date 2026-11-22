@@ -10,7 +10,7 @@ import adminRoutes from './routes/admin.js';
 
 const PUBLIC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
-export function createApp(db) {
+export function createApp(db, { uploadsDir } = {}) {
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
@@ -20,11 +20,13 @@ export function createApp(db) {
       'X-Content-Type-Options': 'nosniff',
       'Referrer-Policy': 'strict-origin-when-cross-origin',
       'X-Frame-Options': 'DENY',
-      'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+      'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
     });
     next();
   });
 
+  // Las fotos de producto viajan en base64: sólo esa ruta acepta cuerpos grandes.
+  app.use('/api/admin/products/:id/photo', express.json({ limit: '8mb' }));
   app.use('/api', express.json({ limit: '50kb' }), (req, res, next) => { req.body ??= {}; next(); });
   // Protección CSRF: las escrituras a la API deben ser JSON (un formulario de otro sitio no puede enviarlo).
   app.use('/api', (req, res, next) => {
@@ -36,10 +38,11 @@ export function createApp(db) {
   app.use('/api/auth', authRoutes(db));
   app.use('/api', shopRoutes(db));
   app.use('/api', clubRoutes(db));
-  app.use('/api/admin', adminRoutes(db));
+  app.use('/api/admin', adminRoutes(db, { uploadsDir }));
   app.get('/api/health', (req, res) => res.json({ ok: true }));
   app.use('/api', (req, res, next) => next(new HttpError(404, 'Ruta no encontrada.')));
 
+  if (uploadsDir) app.use('/uploads', express.static(uploadsDir, { maxAge: '7d', fallthrough: false }));
   app.use(express.static(PUBLIC, { maxAge: '1h', index: 'index.html' }));
   // SPA: cualquier otra ruta devuelve la app
   app.get('/{*splat}', (req, res) => res.sendFile(path.join(PUBLIC, 'index.html')));

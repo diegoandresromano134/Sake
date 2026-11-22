@@ -63,6 +63,13 @@ sake/
 | `#/cuenta` | Pedidos, membresía (baja/reactivación, historial de pagos), perfil, contraseña |
 | `#/admin` | KPIs, estados de pedidos, precios/stock/preventas, socios, anuncios y eventos |
 
+## Fotos de productos
+
+En **Administración → Productos y stock**, cada producto tiene **Subir foto**. La imagen se achica
+en el navegador (lado mayor 1400 px) y reemplaza a la ilustración en el Shop, el Member Shop,
+la ficha y el carrito. **Quitar foto** vuelve a la ilustración. Ideal: foto vertical (4:5),
+botella centrada sobre fondo oscuro. Las fotos se guardan en `data/uploads/` (`UPLOADS_DIR`).
+
 ## Reglas de negocio
 
 - **Precio de socio** (≈15% menos) aplicado por el servidor según la sesión; envío sin cargo para socios.
@@ -87,6 +94,7 @@ CSP estricta · límite de intentos en login/registro · todo el contenido se es
 |---|---|
 | `PORT` | `3000` |
 | `DB_FILE` | `./data/komatsu.db` |
+| `UPLOADS_DIR` | `./data/uploads` |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | `admin@komatsu.local` / `komatsu-admin` |
 | `MEMBERSHIP_PRICE` | `20000` |
 | `SHIPPING_FLAT` / `FREE_SHIPPING_FROM` | `5000` / `60000` |
@@ -97,7 +105,7 @@ CSP estricta · límite de intentos en login/registro · todo el contenido se es
 1. **Pagos reales:** reemplazar `src/payments.js` por Mercado Pago (Checkout Pro para pedidos,
    suscripciones/preapproval para el Club) y confirmar pagos por webhook.
 2. **Emails** (confirmación de pedido, bienvenida al Club, recupero de contraseña).
-3. **Fotos reales** de cada producto (hoy las tarjetas usan ilustraciones SVG de la botella y el tokkuri).
+3. **Fotos reales** de cada producto: se suben desde el panel admin (sin foto se muestra la ilustración).
 4. **Recorrido 360° real:** cambiar la foto por una panorámica equirectangular (por ejemplo con Pannellum).
 5. Precios y textos son de ejemplo: editables desde el panel admin o en `src/db.js`.
 6. Hosting con disco persistente para el archivo SQLite (o migrar a Postgres).

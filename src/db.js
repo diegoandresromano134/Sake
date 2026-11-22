@@ -201,6 +201,9 @@ export function openDb(file) {
   const db = new DatabaseSync(file);
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
+  // Migración: foto real del producto (ruta pública /uploads/...)
+  if (!db.prepare("SELECT 1 FROM pragma_table_info('products') WHERE name='photo'").get())
+    db.exec('ALTER TABLE products ADD COLUMN photo TEXT');
   seed(db);
   return db;
 }

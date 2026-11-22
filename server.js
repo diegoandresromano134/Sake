@@ -6,7 +6,8 @@ import { renewDue } from './src/membership.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const db = openDb(process.env.DB_FILE || path.join(here, 'data', 'komatsu.db'));
-const app = createApp(db);
+const uploadsDir = process.env.UPLOADS_DIR || path.join(here, 'data', 'uploads');
+const app = createApp(db, { uploadsDir });
 const port = Number(process.env.PORT || 3000);
 
 // Renovación mensual de membresías y limpieza de sesiones vencidas, cada hora.

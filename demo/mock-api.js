@@ -102,7 +102,7 @@ const s = (v, min, max, field) => { const t = typeof v === 'string' ? v.trim() :
 function productView(p, member) {
   const presale = p.presale_until && new Date(p.presale_until) > now();
   return { id: p.id, slug: p.slug, name: p.name, nameJp: p.name_jp, variety: p.variety, format: p.format, volumeMl: p.volume_ml, vintage: p.vintage,
-    tagline: p.tagline, description: p.description, tastingNotes: p.tasting_notes, pairing: p.pairing, abv: p.abv, image: p.image, accent: p.accent,
+    tagline: p.tagline, description: p.description, tastingNotes: p.tasting_notes, pairing: p.pairing, abv: p.abv, image: p.image, photo: p.photo || null, accent: p.accent,
     price: p.price, memberPrice: p.member_price, finalPrice: member ? p.member_price : p.price, stock: p.stock, inStock: p.stock > 0,
     lowStock: p.stock > 0 && p.stock <= 10, membersOnly: !!p.members_only, presaleUntil: presale ? p.presale_until : null,
     purchasable: p.stock > 0 && (member || (!p.members_only && !presale)), glutenFree: true };
@@ -271,6 +271,16 @@ const routes = [
     if (b.members_only != null) p.members_only = b.members_only ? 1 : 0;
     if (b.presale_until !== undefined) p.presale_until = b.presale_until ? iso(b.presale_until) : null;
     return { ok: true };
+  }],
+  ['POST', /^\/admin\/products\/(\d+)\/photo$/, (b, m) => {
+    needAdmin();
+    const p = DB.products.find(x => x.id === Number(m[1])) || err(404, 'Producto no encontrado.');
+    if (!/^data:image\/(jpeg|png|webp);base64,/.test(String(b.dataUrl || ''))) err(400, 'Formato de imagen no válido. Usá JPG, PNG o WEBP.');
+    p.photo = b.dataUrl; return { photo: 'data' };
+  }],
+  ['DELETE', /^\/admin\/products\/(\d+)\/photo$/, (b, m) => {
+    needAdmin();
+    const p = DB.products.find(x => x.id === Number(m[1])) || err(404, 'Producto no encontrado.'); p.photo = null; return { ok: true };
   }],
   ['GET', /^\/admin\/members$/, () => {
     needAdmin();

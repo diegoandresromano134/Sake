@@ -194,6 +194,16 @@ h3 { font-size: 18px; letter-spacing: .06em; }
   background: radial-gradient(ellipse at 50% 70%, #1d1b18 0%, var(--black) 70%); }
 .card-art svg { height: 100%; width: auto; max-width: 100%; filter: drop-shadow(0 18px 24px rgba(0,0,0,.6)); transition: transform .4s; }
 .card:hover .card-art svg { transform: translateY(-4px); }
+.product-photo { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .5s; }
+.card-art:has(> .product-photo), .pdp-art:has(> .product-photo) { padding: 0; overflow: hidden; }
+.card:hover .card-art .product-photo { transform: scale(1.03); }
+.cart-line .thumb .product-photo { object-fit: cover; }
+.photo-cell { display: flex; align-items: center; gap: 8px; min-width: 190px; }
+.photo-thumb { width: 44px; height: 56px; flex: none; border: 1px solid var(--line); background: var(--black); display: grid; place-items: center; overflow: hidden; }
+.photo-thumb img, .photo-thumb svg { width: 100%; height: 100%; object-fit: cover; }
+.photo-actions { display: grid; gap: 4px; justify-items: start; }
+.file-btn { position: relative; cursor: pointer; }
+.file-btn input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
 .card-flags { position: absolute; top: 14px; left: 14px; right: 14px; display: flex; flex-wrap: wrap; gap: 6px; }
 .card-body { padding: 18px 20px 22px; display: grid; gap: 6px; flex: 1; align-content: start; }
 .card-body .jp { color: var(--gold-soft); font-size: 13px; letter-spacing: .12em; }

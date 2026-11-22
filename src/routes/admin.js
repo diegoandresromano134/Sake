@@ -1,11 +1,16 @@
 import { Router } from 'express';
+import fs from 'node:fs';
+import path from 'node:path';
+import crypto from 'node:crypto';
 import { requireAdmin } from '../auth.js';
 import { getOrder } from './shop.js';
 import { HttpError, int, str } from '../security.js';
 
 const STATUSES = ['pagado', 'preparando', 'enviado', 'entregado', 'cancelado'];
 
-export default function adminRoutes(db) {
+const MIME = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+
+export default function adminRoutes(db, { uploadsDir } = {}) {
   const r = Router();
   r.use(requireAdmin);
 
@@ -62,6 +67,34 @@ export default function adminRoutes(db) {
     };
     db.prepare('UPDATE products SET price=?,member_price=?,stock=?,active=?,members_only=?,vintage=?,presale_until=? WHERE id=?')
       .run(next.price, next.member_price, next.stock, next.active, next.members_only, next.vintage, next.presale_until, id);
+    res.json({ ok: true });
+  });
+
+  // Foto real del producto: recibe una imagen en data URL (jpg/png/webp, hasta 5 MB).
+  const removePhoto = file => {
+    if (!file || !uploadsDir || !file.startsWith('/uploads/')) return;
+    fs.rmSync(path.join(uploadsDir, path.basename(file)), { force: true });
+  };
+  r.post('/products/:id/photo', (req, res) => {
+    if (!uploadsDir) throw new HttpError(500, 'Carpeta de fotos no configurada.');
+    const p = db.prepare('SELECT id, slug, photo FROM products WHERE id=?').get(int(req.params.id, { min: 1 }));
+    if (!p) throw new HttpError(404, 'Producto no encontrado.');
+    const m = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(String(req.body.dataUrl || ''));
+    if (!m) throw new HttpError(400, 'Formato de imagen no válido. Usá JPG, PNG o WEBP.');
+    const buf = Buffer.from(m[2], 'base64');
+    if (!buf.length || buf.length > 5 * 1024 * 1024) throw new HttpError(413, 'La imagen supera los 5 MB.');
+    const name = `${p.slug}-${crypto.randomBytes(4).toString('hex')}.${MIME[m[1]]}`;
+    fs.mkdirSync(uploadsDir, { recursive: true });
+    fs.writeFileSync(path.join(uploadsDir, name), buf);
+    db.prepare('UPDATE products SET photo=? WHERE id=?').run(`/uploads/${name}`, p.id);
+    removePhoto(p.photo);
+    res.status(201).json({ photo: `/uploads/${name}` });
+  });
+  r.delete('/products/:id/photo', (req, res) => {
+    const p = db.prepare('SELECT id, photo FROM products WHERE id=?').get(int(req.params.id, { min: 1 }));
+    if (!p) throw new HttpError(404, 'Producto no encontrado.');
+    db.prepare('UPDATE products SET photo=NULL WHERE id=?').run(p.id);
+    removePhoto(p.photo);
     res.json({ ok: true });
   });
 

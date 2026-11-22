@@ -52,6 +52,8 @@ function tokkuri(cx, accent, year, idSuffix) {
     ${label(cx - 22, 140, 44, 64, accent, year, true)}`;
 }
 export function productArt(p) {
+  // Foto real del producto si existe; si no, la ilustración.
+  if (p.photo) return `<img class="product-photo" src="${esc(p.photo)}" alt="${esc(p.name)}" loading="lazy">`;
   const accent = ACCENT[p.accent] || ACCENT.gold;
   const year = p.vintage;
   if (p.format === 'tokkuri') return `<svg viewBox="0 0 200 240" role="img" aria-label="${esc(p.name)}">${tokkuri(100, accent, year, p.id)}</svg>`;
@@ -83,4 +85,25 @@ export const formatLabel = p => p.format === 'tokkuri' ? 'Tokkuri' : p.format ==
 
 export function formData(form) {
   return Object.fromEntries(new FormData(form).entries());
+}
+
+// Achica una foto en el navegador antes de subirla (lado mayor 1400 px, JPEG).
+export function resizeImage(file, max = 1400, quality = 0.86) {
+  return new Promise((resolve, reject) => {
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return reject(new Error('Elegí una imagen JPG, PNG o WEBP.'));
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#0A0A0A'; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('No se pudo leer la imagen.')); };
+    img.src = url;
+  });
 }
